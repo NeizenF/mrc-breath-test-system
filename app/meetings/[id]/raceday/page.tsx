@@ -40,6 +40,7 @@ type Driver = {
 type TestRow = {
   id: string;
   entry_id: string;
+  meeting_id?: string;
   tested: boolean;
   tested_at: string | null;
   tested_by: string | null;
@@ -90,6 +91,7 @@ export default function RaceDayPage() {
   const [liveStatus, setLiveStatus] = useState<"connecting" | "live" | "offline">(
     "connecting"
   );
+  const [busyEntryIds, setBusyEntryIds] = useState<string[]>([]);
 
   const loadMeetingsList = useCallback(async () => {
     setMeetingsLoading(true);
@@ -189,7 +191,7 @@ export default function RaceDayPage() {
       if (entryIds.length > 0) {
         const { data: testsData, error: testsError } = await supabase
           .from("tests")
-          .select("id,entry_id,tested,tested_at,tested_by")
+          .select("id,entry_id,tested,tested_at,tested_by,meeting_id")
           .eq("meeting_id", meetingId)
           .in("entry_id", entryIds);
 
@@ -261,6 +263,24 @@ export default function RaceDayPage() {
     await loadMeetingAndRaces();
   }, [loadMeetingsList, loadMeetingAndRaces]);
 
+  function applyTestChangeToRows(testRow: {
+    entry_id: string;
+    tested: boolean;
+    tested_at: string | null;
+  }) {
+    setRows((currentRows) =>
+      currentRows.map((row) =>
+        row.entry_id === testRow.entry_id
+          ? {
+              ...row,
+              tested: !!testRow.tested,
+              tested_at: testRow.tested_at || null,
+            }
+          : row
+      )
+    );
+  }
+
   async function toggleTest(row: Row) {
     if (!userId) {
       alert("No logged-in user found.");
@@ -283,6 +303,9 @@ export default function RaceDayPage() {
 
     if (relatedRows.length === 0) return;
 
+    const relatedEntryIds = relatedRows.map((relatedRow) => relatedRow.entry_id);
+    setBusyEntryIds(relatedEntryIds);
+
     const payload = relatedRows.map((relatedRow) => ({
       meeting_id: meetingId,
       entry_id: relatedRow.entry_id,
@@ -297,16 +320,15 @@ export default function RaceDayPage() {
 
     if (error) {
       alert(error.message);
+      setBusyEntryIds([]);
       return;
     }
 
-    const relatedEntryIds = new Set(
-      relatedRows.map((relatedRow) => relatedRow.entry_id)
-    );
+    const relatedEntryIdSet = new Set(relatedEntryIds);
 
     setRows((currentRows) =>
       currentRows.map((currentRow) =>
-        relatedEntryIds.has(currentRow.entry_id)
+        relatedEntryIdSet.has(currentRow.entry_id)
           ? {
               ...currentRow,
               tested: newTestedValue,
@@ -315,6 +337,8 @@ export default function RaceDayPage() {
           : currentRow
       )
     );
+
+    setBusyEntryIds([]);
   }
 
   useEffect(() => {
@@ -363,8 +387,24 @@ export default function RaceDayPage() {
           table: "tests",
           filter: `meeting_id=eq.${meetingId}`,
         },
-        async () => {
-          await reloadEverything();
+        (payload) => {
+          const changed = payload.new || payload.old;
+
+          if (
+            changed &&
+            typeof changed === "object" &&
+            "entry_id" in changed &&
+            "tested" in changed
+          ) {
+            applyTestChangeToRows({
+              entry_id: String(changed.entry_id),
+              tested: Boolean(changed.tested),
+              tested_at:
+                "tested_at" in changed && changed.tested_at
+                  ? String(changed.tested_at)
+                  : null,
+            });
+          }
         }
       )
       .on(
@@ -548,9 +588,7 @@ export default function RaceDayPage() {
                 <div key={item.raceId} className="flex items-center gap-2">
                   <span className="font-medium">R{item.raceNumber}</span>
                   <span className="text-muted-foreground">
-                    {item.allTested
-                      ? "✓"
-                      : `${item.testedCount}/${item.totalCount}`}
+                    {item.allTested ? "✓" : `${item.testedCount}/${item.totalCount}`}
                   </span>
                 </div>
               ))}
@@ -619,9 +657,7 @@ export default function RaceDayPage() {
                           <p className="text-lg font-bold">
                             {testedCount} / {totalCount}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            tested
-                          </p>
+                          <p className="text-xs text-muted-foreground">tested</p>
                         </>
                       )}
                     </div>
@@ -649,76 +685,84 @@ export default function RaceDayPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {raceRows.map((row) => (
-                            <tr
-                              key={row.entry_id}
-                              className={`border-b align-middle ${
-                                row.scratched
-                                  ? "bg-gray-200 dark:bg-gray-900/40 opacity-70"
-                                  : row.driver_name === "NOT DECLARED"
-                                    ? "bg-orange-100 dark:bg-orange-950/40"
-                                    : row.tested
-                                      ? "bg-green-50 dark:bg-green-950/20"
-                                      : ""
-                              }`}
-                            >
-                              <td className="px-3 py-3">{row.gate ?? "—"}</td>
-                              <td className="px-3 py-3 font-medium">
-                                {row.scratched
-                                  ? `SCRATCHED${row.horse_name ? ` — ${row.horse_name}` : ""}`
-                                  : row.horse_name || "Unnamed horse"}
-                              </td>
-                              <td className="px-3 py-3">
-                                {row.scratched ? "—" : row.driver_name}
-                              </td>
-                              <td className="px-3 py-3 text-muted-foreground">
-                                {row.scratched
-                                  ? "—"
-                                  : row.driver_id
-                                    ? row.driver_id_card || "No ID found"
-                                    : "No linked driver"}
-                              </td>
-                              <td className="px-3 py-3 text-muted-foreground">
-                                {row.scratched
-                                  ? "—"
-                                  : row.driver_id
-                                    ? row.driver_phone || "No phone found"
-                                    : "No linked driver"}
-                              </td>
-                              <td className="px-3 py-3">
-                                {row.scratched
-                                  ? "Scratched"
-                                  : row.driver_name === "NOT DECLARED"
-                                    ? "No driver"
-                                    : row.tested
-                                      ? "Tested"
-                                      : "Pending"}
-                              </td>
-                              <td className="px-3 py-3 text-muted-foreground">
-                                {row.tested_at
-                                  ? new Date(row.tested_at).toLocaleTimeString()
-                                  : "—"}
-                              </td>
-                              <td className="px-3 py-3">
-                                <Button
-                                  variant={row.tested ? "default" : "outline"}
-                                  onClick={() => toggleTest(row)}
-                                  disabled={
-                                    row.scratched || row.driver_name === "NOT DECLARED"
-                                  }
-                                  className="min-w-[120px]"
-                                >
+                          {raceRows.map((row) => {
+                            const isBusy = busyEntryIds.includes(row.entry_id);
+
+                            return (
+                              <tr
+                                key={row.entry_id}
+                                className={`border-b align-middle ${
+                                  row.scratched
+                                    ? "bg-gray-200 dark:bg-gray-900/40 opacity-70"
+                                    : row.driver_name === "NOT DECLARED"
+                                      ? "bg-orange-100 dark:bg-orange-950/40"
+                                      : row.tested
+                                        ? "bg-green-50 dark:bg-green-950/20"
+                                        : ""
+                                }`}
+                              >
+                                <td className="px-3 py-3">{row.gate ?? "—"}</td>
+                                <td className="px-3 py-3 font-medium">
+                                  {row.scratched
+                                    ? `SCRATCHED${row.horse_name ? ` — ${row.horse_name}` : ""}`
+                                    : row.horse_name || "Unnamed horse"}
+                                </td>
+                                <td className="px-3 py-3">
+                                  {row.scratched ? "—" : row.driver_name}
+                                </td>
+                                <td className="px-3 py-3 text-muted-foreground">
+                                  {row.scratched
+                                    ? "—"
+                                    : row.driver_id
+                                      ? row.driver_id_card || "No ID found"
+                                      : "No linked driver"}
+                                </td>
+                                <td className="px-3 py-3 text-muted-foreground">
+                                  {row.scratched
+                                    ? "—"
+                                    : row.driver_id
+                                      ? row.driver_phone || "No phone found"
+                                      : "No linked driver"}
+                                </td>
+                                <td className="px-3 py-3">
                                   {row.scratched
                                     ? "Scratched"
                                     : row.driver_name === "NOT DECLARED"
                                       ? "No driver"
                                       : row.tested
                                         ? "Tested"
-                                        : "Mark tested"}
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
+                                        : "Pending"}
+                                </td>
+                                <td className="px-3 py-3 text-muted-foreground">
+                                  {row.tested_at
+                                    ? new Date(row.tested_at).toLocaleTimeString()
+                                    : "—"}
+                                </td>
+                                <td className="px-3 py-3">
+                                  <Button
+                                    variant={row.tested ? "default" : "outline"}
+                                    onClick={() => toggleTest(row)}
+                                    disabled={
+                                      isBusy ||
+                                      row.scratched ||
+                                      row.driver_name === "NOT DECLARED"
+                                    }
+                                    className="min-w-[120px]"
+                                  >
+                                    {row.scratched
+                                      ? "Scratched"
+                                      : row.driver_name === "NOT DECLARED"
+                                        ? "No driver"
+                                        : isBusy
+                                          ? "Saving..."
+                                          : row.tested
+                                            ? "Tested"
+                                            : "Mark tested"}
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
