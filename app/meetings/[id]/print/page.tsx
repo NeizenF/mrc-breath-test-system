@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatDateLong } from "@/lib/formatters";
 
 type Meeting = {
@@ -48,6 +49,14 @@ type PrintDriverRow = {
   fully_tested: boolean;
 };
 
+type EditablePrintRow = {
+  key: string;
+  driver_name: string;
+  id_card: string;
+  phone: string;
+  fully_tested: boolean;
+};
+
 export default function MeetingPrintPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -56,6 +65,12 @@ export default function MeetingPrintPage() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [rows, setRows] = useState<PrintDriverRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [editMode, setEditMode] = useState(true);
+  const [editableTitle, setEditableTitle] = useState("");
+  const [editableDate, setEditableDate] = useState("");
+  const [editableRows, setEditableRows] = useState<EditablePrintRow[]>([]);
+  const [notes, setNotes] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -100,8 +115,12 @@ export default function MeetingPrintPage() {
     const raceIds = races.map((r) => r.id);
 
     if (raceIds.length === 0) {
-      setMeeting(meetingData as Meeting);
+      const loadedMeeting = meetingData as Meeting;
+      setMeeting(loadedMeeting);
       setRows([]);
+      setEditableTitle(loadedMeeting.title || "");
+      setEditableDate(loadedMeeting.meeting_date || "");
+      setEditableRows([]);
       setLoading(false);
       return;
     }
@@ -121,7 +140,9 @@ export default function MeetingPrintPage() {
       (entry) => !entry.scratched
     );
 
-    const driverIds = [...new Set(entries.map((e) => e.driver_id).filter(Boolean))] as string[];
+    const driverIds = [
+      ...new Set(entries.map((e) => e.driver_id).filter(Boolean)),
+    ] as string[];
     const entryIds = entries.map((e) => e.id);
 
     let drivers: Driver[] = [];
@@ -159,16 +180,13 @@ export default function MeetingPrintPage() {
 
     const driverMap = new Map(drivers.map((d) => [d.id, d]));
     const testMap = new Map(tests.map((t) => [t.entry_id, t]));
-
     const grouped = new Map<string, PrintDriverRow>();
 
     for (const entry of entries) {
       const linkedDriver = entry.driver_id ? driverMap.get(entry.driver_id) : null;
 
       const driverName =
-        entry.driver_name_raw ||
-        linkedDriver?.full_name ||
-        "NOT DECLARED";
+        entry.driver_name_raw || linkedDriver?.full_name || "NOT DECLARED";
 
       const key = entry.driver_id
         ? `driver:${entry.driver_id}`
@@ -200,14 +218,57 @@ export default function MeetingPrintPage() {
       }))
       .sort((a, b) => a.driver_name.localeCompare(b.driver_name));
 
-    setMeeting(meetingData as Meeting);
+    const loadedMeeting = meetingData as Meeting;
+
+    setMeeting(loadedMeeting);
     setRows(finalRows);
+    setEditableTitle(loadedMeeting.title || "");
+    setEditableDate(loadedMeeting.meeting_date || "");
+    setEditableRows(
+      finalRows.map((row) => ({
+        key: row.key,
+        driver_name: row.driver_name,
+        id_card: row.id_card || "",
+        phone: row.phone || "",
+        fully_tested: row.fully_tested,
+      }))
+    );
     setLoading(false);
   }
 
+  function updateEditableRow(
+    key: string,
+    field: keyof EditablePrintRow,
+    value: string | boolean
+  ) {
+    setEditableRows((prev) =>
+      prev.map((row) => (row.key === key ? { ...row, [field]: value } : row))
+    );
+  }
+
+  function resetEdits() {
+    setEditableTitle(meeting?.title || "");
+    setEditableDate(meeting?.meeting_date || "");
+    setEditableRows(
+      rows.map((row) => ({
+        key: row.key,
+        driver_name: row.driver_name,
+        id_card: row.id_card || "",
+        phone: row.phone || "",
+        fully_tested: row.fully_tested,
+      }))
+    );
+    setNotes("");
+  }
+
   const missingTestsCount = useMemo(() => {
-    return rows.filter((row) => !row.fully_tested).length;
-  }, [rows]);
+    return editableRows.filter((row) => !row.fully_tested).length;
+  }, [editableRows]);
+
+  const printableDate = useMemo(() => {
+    if (!editableDate) return "—";
+    return formatDateLong(editableDate);
+  }, [editableDate]);
 
   if (loading) {
     return (
@@ -230,87 +291,192 @@ export default function MeetingPrintPage() {
           }
 
           @page {
-            size: A4 portrait;
-            margin: 12mm;
+            size: A4 landscape;
+            margin: 8mm;
           }
         }
       `}</style>
 
-      <div className="no-print flex items-center justify-between border-b px-6 py-4">
-        <div>
-          <h1 className="text-lg font-semibold">Meeting print page</h1>
-          <p className="text-sm text-gray-600">
-            Use Print and save as PDF when ready.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push(`/meetings/${meetingId}`)}>
-            Back
-          </Button>
-          <Button onClick={() => window.print()}>
-            Print / Save PDF
-          </Button>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-6xl p-6">
-        <div className="mb-6 grid grid-cols-[220px_1fr_220px] gap-0 border">
-          <div className="flex min-h-[150px] items-center justify-center border-r p-4">
-            <img
-              src="/mrc-logo.jpg"
-              alt="MRC Logo"
-              className="max-h-[120px] max-w-[160px] object-contain"
-            />
+      <div className="no-print border-b px-6 py-4">
+        <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-lg font-semibold">Meeting print page</h1>
+            <p className="text-sm text-gray-600">
+              Edit anything you need, then print or save as PDF.
+            </p>
           </div>
 
-          <div className="min-h-[150px] border-r p-4">
-            <h1 className="mb-6 text-4xl font-semibold leading-tight">
-              Malta Racing Club Breathalyzer Testing
-            </h1>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => router.push(`/meetings/${meetingId}`)}>
+              Back
+            </Button>
 
-            <div className="grid grid-cols-[120px_1fr] gap-y-2 text-[28px] leading-none print:text-[16px]">
-              <div className="font-medium">Meeting #</div>
-              <div>{meeting?.title || "—"}</div>
+            <Button variant="outline" onClick={() => setEditMode((prev) => !prev)}>
+              {editMode ? "Preview mode" : "Edit mode"}
+            </Button>
 
-              <div className="font-medium">Date</div>
-              <div>
-                {meeting?.meeting_date ? formatDateLong(meeting.meeting_date) : "—"}
+            <Button variant="outline" onClick={resetEdits}>
+              Reset edits
+            </Button>
+
+            <Button onClick={() => window.print()}>Print / Save PDF</Button>
+          </div>
+        </div>
+
+        {editMode && (
+          <div className="grid gap-4 rounded-lg border bg-slate-50 p-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Meeting title</label>
+              <Input
+                value={editableTitle}
+                onChange={(e) => setEditableTitle(e.target.value)}
+                placeholder="Meeting title"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Meeting date</label>
+              <Input
+                type="date"
+                value={editableDate}
+                onChange={(e) => setEditableDate(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium">Notes</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional notes for the printout"
+                className="min-h-[80px] w-full rounded-md border bg-white px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mx-auto max-w-[1200px] p-4">
+        <div className="mb-2 border px-3 py-2">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-[42px] w-[42px] shrink-0 items-start justify-start overflow-hidden">
+                <img
+                  src="/mrc-logo.jpg"
+                  alt="MRC Logo"
+                  className="h-[42px] w-[42px] object-contain align-top"
+                />
+              </div>
+
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold leading-tight">
+                  Malta Racing Club Breathalyzer Testing
+                </div>
+
+                <div className="mt-1 grid grid-cols-[70px_1fr] gap-x-2 gap-y-0.5 text-[11px] leading-tight">
+                  <div className="font-semibold">Meeting</div>
+                  <div>{editableTitle || "—"}</div>
+
+                  <div className="font-semibold">Date</div>
+                  <div>{printableDate}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="shrink-0 text-right text-[11px] leading-tight">
+              <div className="font-semibold uppercase text-gray-500">Status</div>
+              <div className="mt-1 font-semibold">
+                {missingTestsCount > 0 ? "⚠ Missing tests" : "✓ All tested"}
               </div>
             </div>
           </div>
-
-          <div className="flex items-start justify-center p-4 pt-8">
-            <div className="text-lg font-medium">
-              {missingTestsCount > 0 ? "⚠ MISSING TESTS" : "✓ ALL TESTED"}
-            </div>
-          </div>
         </div>
 
-        <table className="w-full border-collapse text-[15px]">
+        {notes.trim() && (
+          <div className="mb-2 border p-3">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-700">
+              Notes
+            </div>
+            <div className="whitespace-pre-wrap text-[12px]">{notes}</div>
+          </div>
+        )}
+
+        <table className="w-full border-collapse text-[12px]">
           <thead>
             <tr className="bg-[#2f6b57] text-left text-white">
-              <th className="border px-3 py-2">Driver</th>
-              <th className="border px-3 py-2">ID Number</th>
-              <th className="border px-3 py-2">Phone</th>
-              <th className="border px-3 py-2 text-center">Tested</th>
+              <th className="border px-2 py-1.5">Driver</th>
+              <th className="border px-2 py-1.5">ID Number</th>
+              <th className="border px-2 py-1.5">Phone</th>
+              <th className="border px-2 py-1.5 text-center">Tested</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {editableRows.length === 0 ? (
               <tr>
                 <td colSpan={4} className="border px-3 py-6 text-center text-gray-500">
                   No drivers found for this meeting.
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
+              editableRows.map((row) => (
                 <tr key={row.key}>
-                  <td className="border px-3 py-2">{row.driver_name}</td>
-                  <td className="border px-3 py-2">{row.id_card || ""}</td>
-                  <td className="border px-3 py-2">{row.phone || ""}</td>
-                  <td className="border px-3 py-2 text-center text-lg font-semibold">
-                    {row.fully_tested ? "✓" : ""}
+                  <td className="border px-2 py-1">
+                    {editMode ? (
+                      <Input
+                        value={row.driver_name}
+                        onChange={(e) =>
+                          updateEditableRow(row.key, "driver_name", e.target.value)
+                        }
+                        className="h-7 border-0 p-0 text-[12px] shadow-none focus-visible:ring-0"
+                      />
+                    ) : (
+                      row.driver_name
+                    )}
+                  </td>
+
+                  <td className="border px-2 py-1">
+                    {editMode ? (
+                      <Input
+                        value={row.id_card}
+                        onChange={(e) =>
+                          updateEditableRow(row.key, "id_card", e.target.value)
+                        }
+                        className="h-7 border-0 p-0 text-[12px] shadow-none focus-visible:ring-0"
+                      />
+                    ) : (
+                      row.id_card
+                    )}
+                  </td>
+
+                  <td className="border px-2 py-1">
+                    {editMode ? (
+                      <Input
+                        value={row.phone}
+                        onChange={(e) =>
+                          updateEditableRow(row.key, "phone", e.target.value)
+                        }
+                        className="h-7 border-0 p-0 text-[12px] shadow-none focus-visible:ring-0"
+                      />
+                    ) : (
+                      row.phone
+                    )}
+                  </td>
+
+                  <td className="border px-2 py-1 text-center">
+                    {editMode ? (
+                      <input
+                        type="checkbox"
+                        checked={row.fully_tested}
+                        onChange={(e) =>
+                          updateEditableRow(row.key, "fully_tested", e.target.checked)
+                        }
+                        className="h-3.5 w-3.5"
+                      />
+                    ) : (
+                      <span className="text-sm font-semibold">
+                        {row.fully_tested ? "✓" : ""}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))

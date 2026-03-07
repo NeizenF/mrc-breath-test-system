@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 type Meeting = {
@@ -74,6 +74,34 @@ function formatMeetingLabel(meeting: Meeting) {
     : "No date";
 
   return title ? `${title} — ${date}` : date;
+}
+
+function getRaceColor(raceNumber: number) {
+  const colorMap: Record<number, { bg: string; text: string; border: string }> = {
+    1: { bg: "#FFF200", text: "#111111", border: "#D4C900" },
+    2: { bg: "#8B0094", text: "#FFFFFF", border: "#6D0074" },
+    3: { bg: "#F7A600", text: "#111111", border: "#CC8800" },
+    4: { bg: "#8E8E8E", text: "#FFFFFF", border: "#707070" },
+    5: { bg: "#F52D8A", text: "#FFFFFF", border: "#D21F72" },
+    6: { bg: "#48C9C0", text: "#111111", border: "#33AFA7" },
+    7: { bg: "#B22626", text: "#FFFFFF", border: "#8E1E1E" },
+    8: { bg: "#FF120A", text: "#FFFFFF", border: "#CC0E08" },
+    9: { bg: "#000000", text: "#FFFFFF", border: "#000000" },
+    10: { bg: "#E7E4CD", text: "#111111", border: "#CCC8AE" },
+    11: { bg: "#1200FF", text: "#FFFFFF", border: "#0E00CC" },
+  };
+
+  return (
+    colorMap[raceNumber] || {
+      bg: "#E5E7EB",
+      text: "#111111",
+      border: "#CBD5E1",
+    }
+  );
+}
+
+function normalizeName(value: string | null | undefined) {
+  return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 export default function RaceDayPage() {
@@ -529,9 +557,7 @@ export default function RaceDayPage() {
               </span>
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              RaceDay control panel
-            </p>
+            <p className="text-sm text-muted-foreground">RaceDay control panel</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -579,19 +605,31 @@ export default function RaceDayPage() {
 
         {!loading && races.length > 0 && (
           <div className="space-y-2 text-sm">
-            <p className="text-sm font-medium text-muted-foreground">
-              Race progress
-            </p>
+            <p className="text-sm font-medium text-muted-foreground">Race progress</p>
 
             <div className="grid grid-cols-3 gap-x-6 gap-y-2 md:grid-cols-5 lg:grid-cols-7">
-              {raceProgress.map((item) => (
-                <div key={item.raceId} className="flex items-center gap-2">
-                  <span className="font-medium">R{item.raceNumber}</span>
-                  <span className="text-muted-foreground">
-                    {item.allTested ? "✓" : `${item.testedCount}/${item.totalCount}`}
-                  </span>
-                </div>
-              ))}
+              {raceProgress.map((item) => {
+                const raceColor = getRaceColor(item.raceNumber);
+
+                return (
+                  <div key={item.raceId} className="flex items-center gap-2">
+                    <span
+                      className="inline-flex min-w-[42px] items-center justify-center rounded-md border px-2 py-1 text-xs font-bold"
+                      style={{
+                        backgroundColor: raceColor.bg,
+                        color: raceColor.text,
+                        borderColor: raceColor.border,
+                      }}
+                    >
+                      R{item.raceNumber}
+                    </span>
+
+                    <span className="text-muted-foreground">
+                      {item.allTested ? "✓" : `${item.testedCount}/${item.totalCount}`}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -625,15 +663,25 @@ export default function RaceDayPage() {
             const testedCount = testableRows.filter((row) => row.tested).length;
             const totalCount = testableRows.length;
             const allTested = totalCount > 0 && testedCount === totalCount;
+            const raceColor = getRaceColor(race.race_number);
 
             return (
               <Card key={race.id}>
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-2">
-                      <CardTitle className="text-3xl font-extrabold tracking-tight">
-                        Race {race.race_number}
-                      </CardTitle>
+                    <div className="space-y-3">
+                      <div
+                        className="inline-flex rounded-xl border px-5 py-2"
+                        style={{
+                          backgroundColor: raceColor.bg,
+                          color: raceColor.text,
+                          borderColor: raceColor.border,
+                        }}
+                      >
+                        <span className="text-3xl font-extrabold tracking-tight">
+                          Race {race.race_number}
+                        </span>
+                      </div>
 
                       <p className="text-lg text-muted-foreground">
                         {[race.race_time, race.race_distance, race.race_class]
@@ -642,24 +690,36 @@ export default function RaceDayPage() {
                       </p>
                     </div>
 
-                    <div className="min-w-[150px] rounded-xl border bg-muted/40 px-4 py-3 text-right">
-                      {allTested ? (
-                        <>
-                          <p className="text-sm font-medium text-green-600">
-                            All tested
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {testedCount} / {totalCount}
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-lg font-bold">
-                            {testedCount} / {totalCount}
-                          </p>
-                          <p className="text-xs text-muted-foreground">tested</p>
-                        </>
-                      )}
+                    <div className="min-w-[150px] space-y-2 text-right">
+                      <div className="rounded-xl border bg-muted/40 px-4 py-3">
+                        {allTested ? (
+                          <>
+                            <p className="text-sm font-medium text-green-600">
+                              All tested
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {testedCount} / {totalCount}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-lg font-bold">
+                              {testedCount} / {totalCount}
+                            </p>
+                            <p className="text-xs text-muted-foreground">tested</p>
+                          </>
+                        )}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() =>
+                          router.push(`/meetings/${meetingId}/raceday/race/${race.id}`)
+                        }
+                      >
+                        Edit race
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>

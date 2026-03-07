@@ -68,7 +68,6 @@ export default function MeetingsPage() {
         return;
       }
 
-      // Give Supabase a brief chance to restore session after redirect
       setTimeout(async () => {
         const {
           data: { session: retrySession },
@@ -221,6 +220,13 @@ export default function MeetingsPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/meetings/${meeting.id}/edit`)}
+                  >
+                    Edit
+                  </Button>
+
                   <Button
                     variant="outline"
                     onClick={() => router.push(`/meetings/${meeting.id}`)}
