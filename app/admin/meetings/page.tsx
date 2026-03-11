@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -11,6 +12,7 @@ type Meeting = {
   title: string | null;
   meeting_date: string | null;
   created_at?: string | null;
+  is_archived?: boolean;
 };
 
 function formatMeetingDate(dateStr: string | null) {
@@ -30,15 +32,17 @@ export default function MeetingsPage() {
   const router = useRouter();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
 
   async function loadMeetings() {
     setLoading(true);
 
     const { data, error } = await supabase
       .from("meetings")
-      .select("id,title,meeting_date,created_at")
+      .select("id,title,meeting_date,created_at,is_archived")
+      .eq("is_archived", false)
       .order("meeting_date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false, nullsFirst: false });
 
@@ -55,53 +59,72 @@ export default function MeetingsPage() {
   useEffect(() => {
     let mounted = true;
 
-    async function checkAuth() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!mounted) return;
-
-      if (session?.user) {
-        setCheckingAuth(false);
-        await loadMeetings();
-        return;
-      }
-
-      setTimeout(async () => {
+    async function checkAccess() {
+      try {
         const {
-          data: { session: retrySession },
+          data: { session },
         } = await supabase.auth.getSession();
 
         if (!mounted) return;
 
-        if (retrySession?.user) {
-          setCheckingAuth(false);
-          await loadMeetings();
-        } else {
-          router.replace("/login?redirectTo=/meetings");
+        if (!session) {
+          router.replace("/");
+          return;
         }
-      }, 500);
+
+        const admin = await isCurrentUserAdmin();
+
+        if (!mounted) return;
+
+        if (!admin) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        setCheckingAccess(false);
+        await loadMeetings();
+      } catch (error) {
+        console.error("Failed to check admin access:", error);
+        router.replace("/dashboard");
+      }
     }
 
-    checkAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return;
-
-      if (session?.user) {
-        setCheckingAuth(false);
-        await loadMeetings();
-      }
-    });
+    checkAccess();
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
     };
   }, [router]);
+
+  async function handleArchiveMeeting(meetingId: string) {
+    const confirmed = window.confirm(
+      "Archive this meeting?\n\nIt will be removed from Meetings and shown in Archive."
+    );
+
+    if (!confirmed) return;
+
+    setArchivingId(meetingId);
+
+    try {
+      const { error } = await supabase
+        .from("meetings")
+        .update({ is_archived: true })
+        .eq("id", meetingId);
+
+      if (error) throw error;
+
+      setMeetings((prev) => prev.filter((m) => m.id !== meetingId));
+    } catch (error) {
+      console.error("Archive meeting failed:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to archive meeting. Check console for details."
+      );
+    } finally {
+      setArchivingId(null);
+    }
+  }
 
   async function handleDeleteMeeting(meetingId: string) {
     const confirmed = window.confirm(
@@ -173,10 +196,12 @@ export default function MeetingsPage() {
     }
   }
 
-  if (checkingAuth) {
+  if (checkingAccess) {
     return (
       <div className="p-4 md:p-6">
-        <div className="text-sm text-muted-foreground">Checking login...</div>
+        <div className="text-sm text-muted-foreground">
+          Checking admin access...
+        </div>
       </div>
     );
   }
@@ -187,13 +212,19 @@ export default function MeetingsPage() {
         <div>
           <h1 className="text-2xl font-bold">Meetings</h1>
           <p className="text-sm text-muted-foreground">
-            Manage your imported race meetings
+            Manage your active race meetings
           </p>
         </div>
 
-        <Button onClick={() => router.push("/meetings/new")}>
-          New Meeting
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push("/admin/archive")}>
+            Archive
+          </Button>
+
+          <Button onClick={() => router.push("/meetings/new")}>
+            New Meeting
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -201,7 +232,7 @@ export default function MeetingsPage() {
       ) : meetings.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No meetings found.
+            No active meetings found.
           </CardContent>
         </Card>
       ) : (
@@ -246,6 +277,14 @@ export default function MeetingsPage() {
                     onClick={() => router.push(`/meetings/${meeting.id}/raceday`)}
                   >
                     RaceDay
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    disabled={archivingId === meeting.id}
+                    onClick={() => handleArchiveMeeting(meeting.id)}
+                  >
+                    {archivingId === meeting.id ? "Archiving..." : "Archive"}
                   </Button>
 
                   <Button

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { normalizeName } from "@/lib/normalizeName";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ export default function DriversPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
   const [newName, setNewName] = useState("");
   const [newIdCard, setNewIdCard] = useState("");
@@ -157,59 +158,50 @@ export default function DriversPage() {
   useEffect(() => {
     let mounted = true;
 
-    async function checkAuth() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!mounted) return;
-
-      if (session?.user) {
-        setCheckingAuth(false);
-        await loadDrivers();
-        return;
-      }
-
-      setTimeout(async () => {
+    async function checkAccess() {
+      try {
         const {
-          data: { session: retrySession },
+          data: { session },
         } = await supabase.auth.getSession();
 
         if (!mounted) return;
 
-        if (retrySession?.user) {
-          setCheckingAuth(false);
-          await loadDrivers();
-        } else {
-          router.replace("/login?redirectTo=/drivers");
+        if (!session) {
+          router.replace("/");
+          return;
         }
-      }, 500);
+
+        const admin = await isCurrentUserAdmin();
+
+        if (!mounted) return;
+
+        if (!admin) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        setCheckingAccess(false);
+        await loadDrivers();
+      } catch (error) {
+        console.error("Failed to check admin access:", error);
+        router.replace("/dashboard");
+      }
     }
 
-    checkAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted) return;
-
-      if (session?.user) {
-        setCheckingAuth(false);
-        await loadDrivers();
-      }
-    });
+    checkAccess();
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
     };
   }, [router]);
 
-  if (checkingAuth) {
+  if (checkingAccess) {
     return (
       <div className="min-h-screen bg-muted/30 p-6">
         <div className="mx-auto max-w-6xl">
-          <p className="text-sm text-muted-foreground">Checking login...</p>
+          <p className="text-sm text-muted-foreground">
+            Checking admin access...
+          </p>
         </div>
       </div>
     );
@@ -227,11 +219,11 @@ export default function DriversPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => router.push("/")}>
-              Home
+            <Button variant="outline" onClick={() => router.push("/dashboard")}>
+              Dashboard
             </Button>
-            <Button variant="outline" onClick={() => router.push("/meetings")}>
-              Meetings
+            <Button variant="outline" onClick={() => router.push("/admin")}>
+              Admin
             </Button>
           </div>
         </div>
@@ -302,7 +294,9 @@ export default function DriversPage() {
               </div>
 
               <div className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">
-                {selectedFileName ? `Selected file: ${selectedFileName}` : "No file selected"}
+                {selectedFileName
+                  ? `Selected file: ${selectedFileName}`
+                  : "No file selected"}
               </div>
             </CardContent>
           </Card>

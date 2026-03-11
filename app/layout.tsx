@@ -33,7 +33,7 @@ export default function RootLayout({
         <IdleLogout />
 
         <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-6xl items-center px-4 py-3 sm:px-6 lg:px-8">
             <Link
               href="/dashboard"
               className="flex items-center gap-3 transition-opacity hover:opacity-90"
@@ -46,32 +46,11 @@ export default function RootLayout({
                 className="rounded"
               />
               <div className="leading-tight">
-                <div className="text-lg font-semibold">MRC Breath Test System</div>
+                <div className="text-lg font-semibold">
+                  MRC Breath Test System
+                </div>
               </div>
             </Link>
-
-            <nav className="flex items-center gap-5 text-sm font-medium text-slate-600">
-              <Link
-                href="/dashboard"
-                className="transition-colors hover:text-slate-900"
-              >
-                Home
-              </Link>
-
-              <Link
-                href="/meetings"
-                className="transition-colors hover:text-slate-900"
-              >
-                Meetings
-              </Link>
-
-              <Link
-                href="/drivers"
-                className="transition-colors hover:text-slate-900"
-              >
-                DriverInfo
-              </Link>
-            </nav>
           </div>
         </header>
 
