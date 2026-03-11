@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ export default function EditMeetingPage() {
   const router = useRouter();
   const meetingId = params.id;
 
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -27,38 +29,56 @@ export default function EditMeetingPage() {
   useEffect(() => {
     let mounted = true;
 
-    async function loadMeeting() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    async function checkAccessAndLoadMeeting() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      if (!user) {
-        router.replace(`/login?redirectTo=/meetings/${meetingId}/edit`);
-        return;
+        if (!mounted) return;
+
+        if (!session) {
+          router.replace("/");
+          return;
+        }
+
+        const admin = await isCurrentUserAdmin();
+
+        if (!mounted) return;
+
+        if (!admin) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        setCheckingAccess(false);
+
+        const { data, error } = await supabase
+          .from("meetings")
+          .select("id,title,meeting_date")
+          .eq("id", meetingId)
+          .single();
+
+        if (!mounted) return;
+
+        if (error || !data) {
+          alert(error?.message || "Meeting not found.");
+          router.replace("/admin/meetings");
+          return;
+        }
+
+        const meeting = data as Meeting;
+
+        setTitle(meeting.title ?? "");
+        setMeetingDate(meeting.meeting_date ?? "");
+        setLoading(false);
+      } catch (error) {
+        console.error("Failed to check admin access or load meeting:", error);
+        router.replace("/dashboard");
       }
-
-      const { data, error } = await supabase
-        .from("meetings")
-        .select("id,title,meeting_date")
-        .eq("id", meetingId)
-        .single();
-
-      if (!mounted) return;
-
-      if (error || !data) {
-        alert(error?.message || "Meeting not found.");
-        router.replace("/meetings");
-        return;
-      }
-
-      const meeting = data as Meeting;
-
-      setTitle(meeting.title ?? "");
-      setMeetingDate(meeting.meeting_date ?? "");
-      setLoading(false);
     }
 
-    loadMeeting();
+    checkAccessAndLoadMeeting();
 
     return () => {
       mounted = false;
@@ -85,8 +105,18 @@ export default function EditMeetingPage() {
       return;
     }
 
-    router.push("/meetings");
+    router.push("/admin/meetings");
     router.refresh();
+  }
+
+  if (checkingAccess) {
+    return (
+      <div className="p-4 md:p-6">
+        <div className="text-sm text-muted-foreground">
+          Checking admin access...
+        </div>
+      </div>
+    );
   }
 
   if (loading) {
@@ -138,7 +168,7 @@ export default function EditMeetingPage() {
 
               <Button
                 variant="outline"
-                onClick={() => router.push("/meetings")}
+                onClick={() => router.push("/admin/meetings")}
               >
                 Back to meetings
               </Button>

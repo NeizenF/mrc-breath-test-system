@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type Meeting = {
   id: string;
@@ -120,6 +121,13 @@ export default function RaceDayPage() {
     "connecting"
   );
   const [busyEntryIds, setBusyEntryIds] = useState<string[]>([]);
+  const [driverSearch, setDriverSearch] = useState("");
+  const [searchMessage, setSearchMessage] = useState("");
+  const [activeFoundEntryId, setActiveFoundEntryId] = useState<string | null>(null);
+
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const lastSearchTermRef = useRef("");
+  const currentMatchIndexRef = useRef(-1);
 
   const loadMeetingsList = useCallback(async () => {
     setMeetingsLoading(true);
@@ -485,6 +493,16 @@ export default function RaceDayPage() {
     };
   }, [meetingId, reloadEverything]);
 
+  useEffect(() => {
+    if (!activeFoundEntryId) return;
+
+    const timeout = setTimeout(() => {
+      setActiveFoundEntryId(null);
+    }, 2500);
+
+    return () => clearTimeout(timeout);
+  }, [activeFoundEntryId]);
+
   const heading = useMemo(() => {
     if (!meeting) return "RaceDay";
     return meeting.title || `Meeting ${meeting.meeting_date || ""}`;
@@ -528,9 +546,84 @@ export default function RaceDayPage() {
     });
   }, [races, rowsByRace]);
 
+  const searchableRows = useMemo(() => {
+    return rows.filter(
+      (row) =>
+        !row.scratched &&
+        row.driver_name !== "NOT DECLARED" &&
+        normalizeName(row.driver_name).includes(normalizeName(driverSearch))
+    );
+  }, [rows, driverSearch]);
+
   function handleMeetingChange(nextMeetingId: string) {
     if (!nextMeetingId || nextMeetingId === meetingId) return;
     router.push(`/meetings/${nextMeetingId}/raceday`);
+  }
+
+  function scrollToRow(entryId: string) {
+    const element = rowRefs.current[entryId];
+
+    if (!element) return false;
+
+    element.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    setActiveFoundEntryId(entryId);
+    return true;
+  }
+
+  function handleFindDriver() {
+    const search = normalizeName(driverSearch);
+
+    if (!search) {
+      setSearchMessage("Type a driver name first.");
+      return;
+    }
+
+    if (searchableRows.length === 0) {
+      currentMatchIndexRef.current = -1;
+      lastSearchTermRef.current = search;
+      setActiveFoundEntryId(null);
+      setSearchMessage("No matching driver found.");
+      return;
+    }
+
+    if (lastSearchTermRef.current !== search) {
+      currentMatchIndexRef.current = 0;
+    } else {
+      currentMatchIndexRef.current =
+        (currentMatchIndexRef.current + 1) % searchableRows.length;
+    }
+
+    lastSearchTermRef.current = search;
+
+    const match = searchableRows[currentMatchIndexRef.current];
+
+    if (!match) {
+      setSearchMessage("No matching driver found.");
+      return;
+    }
+
+    const scrolled = scrollToRow(match.entry_id);
+
+    if (!scrolled) {
+      setSearchMessage("Match found, but could not scroll to it.");
+      return;
+    }
+
+    setSearchMessage(
+      `Match ${currentMatchIndexRef.current + 1} of ${searchableRows.length}: ${match.driver_name}`
+    );
+  }
+
+  function handleClearSearch() {
+    setDriverSearch("");
+    setSearchMessage("");
+    setActiveFoundEntryId(null);
+    currentMatchIndexRef.current = -1;
+    lastSearchTermRef.current = "";
   }
 
   return (
@@ -545,15 +638,15 @@ export default function RaceDayPage() {
                   liveStatus === "live"
                     ? "bg-green-100 text-green-700"
                     : liveStatus === "offline"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-yellow-100 text-yellow-700"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-yellow-100 text-yellow-700"
                 }`}
               >
                 {liveStatus === "live"
                   ? "Live"
                   : liveStatus === "offline"
-                    ? "Offline"
-                    : "Connecting..."}
+                  ? "Offline"
+                  : "Connecting..."}
               </span>
             </div>
 
@@ -564,41 +657,77 @@ export default function RaceDayPage() {
             <Button variant="outline" onClick={() => router.push("/dashboard")}>
               Home
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/meetings/${meetingId}`)}
-            >
-              Meeting
-            </Button>
+            
           </div>
         </div>
 
         <Card>
           <CardContent className="pt-6">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-              <label htmlFor="meeting-select" className="text-sm font-medium">
-                Meeting
-              </label>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="meeting-select" className="text-sm font-medium">
+                  Meeting
+                </label>
 
-              <select
-                id="meeting-select"
-                value={meetingId}
-                onChange={(e) => handleMeetingChange(e.target.value)}
-                disabled={meetingsLoading || allMeetings.length === 0}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:max-w-md"
-              >
-                {meetingsLoading ? (
-                  <option value={meetingId}>Loading meetings...</option>
-                ) : allMeetings.length === 0 ? (
-                  <option value={meetingId}>No meetings found</option>
-                ) : (
-                  allMeetings.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {formatMeetingLabel(item)}
-                    </option>
-                  ))
+                <select
+                  id="meeting-select"
+                  value={meetingId}
+                  onChange={(e) => handleMeetingChange(e.target.value)}
+                  disabled={meetingsLoading || allMeetings.length === 0}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {meetingsLoading ? (
+                    <option value={meetingId}>Loading meetings...</option>
+                  ) : allMeetings.length === 0 ? (
+                    <option value={meetingId}>No meetings found</option>
+                  ) : (
+                    allMeetings.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {formatMeetingLabel(item)}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label htmlFor="driver-search" className="text-sm font-medium">
+                  Find driver
+                </label>
+
+                <div className="flex gap-2">
+                  <Input
+                    id="driver-search"
+                    value={driverSearch}
+                    onChange={(e) => setDriverSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleFindDriver();
+                      }
+                    }}
+                    placeholder="Type name and press Enter..."
+                  />
+
+                  <Button onClick={handleFindDriver}>
+                    Find
+                  </Button>
+
+                  {driverSearch.trim() && (
+                    <Button variant="outline" onClick={handleClearSearch}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Press Enter or click Find again to jump to the next match.
+                </p>
+
+                {searchMessage && (
+                  <p className="text-xs text-muted-foreground">{searchMessage}</p>
                 )}
-              </select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -747,18 +876,24 @@ export default function RaceDayPage() {
                         <tbody>
                           {raceRows.map((row) => {
                             const isBusy = busyEntryIds.includes(row.entry_id);
+                            const isFound = activeFoundEntryId === row.entry_id;
 
                             return (
                               <tr
                                 key={row.entry_id}
-                                className={`border-b align-middle ${
-                                  row.scratched
+                                ref={(element) => {
+                                  rowRefs.current[row.entry_id] = element;
+                                }}
+                                className={`border-b align-middle transition-colors ${
+                                  isFound
+                                    ? "bg-yellow-200"
+                                    : row.scratched
                                     ? "bg-gray-200 dark:bg-gray-900/40 opacity-70"
                                     : row.driver_name === "NOT DECLARED"
-                                      ? "bg-orange-100 dark:bg-orange-950/40"
-                                      : row.tested
-                                        ? "bg-green-50 dark:bg-green-950/20"
-                                        : ""
+                                    ? "bg-orange-100 dark:bg-orange-950/40"
+                                    : row.tested
+                                    ? "bg-green-50 dark:bg-green-950/20"
+                                    : ""
                                 }`}
                               >
                                 <td className="px-3 py-3">{row.gate ?? "—"}</td>
@@ -774,24 +909,24 @@ export default function RaceDayPage() {
                                   {row.scratched
                                     ? "—"
                                     : row.driver_id
-                                      ? row.driver_id_card || "No ID found"
-                                      : "No linked driver"}
+                                    ? row.driver_id_card || "No ID found"
+                                    : "No linked driver"}
                                 </td>
                                 <td className="px-3 py-3 text-muted-foreground">
                                   {row.scratched
                                     ? "—"
                                     : row.driver_id
-                                      ? row.driver_phone || "No phone found"
-                                      : "No linked driver"}
+                                    ? row.driver_phone || "No phone found"
+                                    : "No linked driver"}
                                 </td>
                                 <td className="px-3 py-3">
                                   {row.scratched
                                     ? "Scratched"
                                     : row.driver_name === "NOT DECLARED"
-                                      ? "No driver"
-                                      : row.tested
-                                        ? "Tested"
-                                        : "Pending"}
+                                    ? "No driver"
+                                    : row.tested
+                                    ? "Tested"
+                                    : "Pending"}
                                 </td>
                                 <td className="px-3 py-3 text-muted-foreground">
                                   {row.tested_at
@@ -812,12 +947,12 @@ export default function RaceDayPage() {
                                     {row.scratched
                                       ? "Scratched"
                                       : row.driver_name === "NOT DECLARED"
-                                        ? "No driver"
-                                        : isBusy
-                                          ? "Saving..."
-                                          : row.tested
-                                            ? "Tested"
-                                            : "Mark tested"}
+                                      ? "No driver"
+                                      : isBusy
+                                      ? "Saving..."
+                                      : row.tested
+                                      ? "Tested"
+                                      : "Mark tested"}
                                   </Button>
                                 </td>
                               </tr>

@@ -1,60 +1,106 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
-const IDLE_LIMIT = 60 * 60 * 1000; // 1 hour
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
 
 export default function IdleLogout() {
   const router = useRouter();
   const pathname = usePathname();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLoggingOutRef = useRef(false);
 
   useEffect(() => {
-    const publicPaths = ["/", "/login"];
-    const isPublicPath =
-      publicPaths.includes(pathname) || pathname.startsWith("/raceday");
+    let mounted = true;
 
-    if (isPublicPath) {
-      return;
+    async function logoutNow() {
+      if (isLoggingOutRef.current) return;
+      isLoggingOutRef.current = true;
+
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        console.error("Idle logout failed:", error);
+      } finally {
+        if (mounted) {
+          router.replace("/");
+          router.refresh();
+        }
+      }
     }
 
-    const resetTimer = () => {
+    async function resetTimer() {
+      if (isLoggingOutRef.current) return;
+
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("Failed to read session for idle logout:", error);
+        return;
+      }
+
+      if (!session) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        return;
+      }
+
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
 
-      timerRef.current = setTimeout(async () => {
-        await supabase.auth.signOut();
-        router.replace("/login");
-      }, IDLE_LIMIT);
+      timerRef.current = setTimeout(() => {
+        void logoutNow();
+      }, IDLE_TIMEOUT_MS);
+    }
+
+    const activityHandler = () => {
+      void resetTimer();
     };
 
     const events: Array<keyof WindowEventMap> = [
       "mousemove",
       "mousedown",
       "keydown",
-      "scroll",
       "touchstart",
+      "scroll",
+      "click",
     ];
 
     events.forEach((event) => {
-      window.addEventListener(event, resetTimer);
+      window.addEventListener(event, activityHandler, { passive: true });
     });
 
-    resetTimer();
+    void resetTimer();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void resetTimer();
+    });
 
     return () => {
-      events.forEach((event) => {
-        window.removeEventListener(event, resetTimer);
-      });
+      mounted = false;
 
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
+
+      events.forEach((event) => {
+        window.removeEventListener(event, activityHandler);
+      });
+
+      subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [router, pathname]);
 
   return null;
 }

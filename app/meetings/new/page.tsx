@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 export default function NewMeetingPage() {
   const router = useRouter();
 
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
@@ -18,21 +19,36 @@ export default function NewMeetingPage() {
   useEffect(() => {
     let mounted = true;
 
-    async function checkAuth() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    async function checkAccess() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (session?.user) {
-        setCheckingAuth(false);
-      } else {
-        router.replace("/login?redirectTo=/meetings/new");
+        if (!session) {
+          router.replace("/");
+          return;
+        }
+
+        const admin = await isCurrentUserAdmin();
+
+        if (!mounted) return;
+
+        if (!admin) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        setCheckingAccess(false);
+      } catch (error) {
+        console.error("Failed to check admin access:", error);
+        router.replace("/dashboard");
       }
     }
 
-    checkAuth();
+    checkAccess();
 
     return () => {
       mounted = false;
@@ -65,10 +81,10 @@ export default function NewMeetingPage() {
     router.refresh();
   }
 
-  if (checkingAuth) {
+  if (checkingAccess) {
     return (
       <div className="p-4 md:p-6">
-        <div className="text-sm text-slate-500">Checking login...</div>
+        <div className="text-sm text-slate-500">Checking admin access...</div>
       </div>
     );
   }
@@ -109,7 +125,7 @@ export default function NewMeetingPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push("/meetings")}
+                  onClick={() => router.push("/admin/meetings")}
                 >
                   Cancel
                 </Button>
