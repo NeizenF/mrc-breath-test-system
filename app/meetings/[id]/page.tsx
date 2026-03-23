@@ -337,7 +337,7 @@ export default function MeetingDetailPage() {
               Home
             </Button>
 
-            <Button variant="outline" onClick={() => router.push("/meetings")}>
+            <Button variant="outline" onClick={() => router.push("/admin/meetings")}>
               Meetings
             </Button>
 
