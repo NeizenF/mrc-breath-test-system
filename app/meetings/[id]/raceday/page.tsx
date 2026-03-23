@@ -10,6 +10,7 @@ type Meeting = {
   id: string;
   title: string | null;
   meeting_date: string | null;
+  is_archived?: boolean;
 };
 
 type Race = {
@@ -44,6 +45,7 @@ type TestRow = {
   tested: boolean;
   tested_at: string | null;
   tested_by: string | null;
+  result: "negative" | "positive" | null;
 };
 
 type Row = {
@@ -60,6 +62,7 @@ type Row = {
   driver_phone: string | null;
   tested: boolean;
   tested_at: string | null;
+  result: "negative" | "positive" | null;
 };
 
 function formatMeetingLabel(meeting: Meeting) {
@@ -122,7 +125,7 @@ export default function RaceDayPage() {
 
     const { data, error } = await supabase
       .from("meetings")
-      .select("id,title,meeting_date")
+      .select("id,title,meeting_date,is_archived")
       .eq("is_archived", false)
       .order("meeting_date", { ascending: false, nullsFirst: false })
       .order("title", { ascending: true });
@@ -140,7 +143,7 @@ export default function RaceDayPage() {
   const loadMeetingAndRaces = useCallback(async () => {
     const { data: meetingData, error: meetingError } = await supabase
       .from("meetings")
-      .select("id,title,meeting_date")
+      .select("id,title,meeting_date,is_archived")
       .eq("id", meetingId)
       .single();
 
@@ -216,7 +219,7 @@ export default function RaceDayPage() {
       if (entryIds.length > 0) {
         const { data: testsData, error: testsError } = await supabase
           .from("tests")
-          .select("id,entry_id,tested,tested_at,tested_by,meeting_id")
+          .select("id,entry_id,tested,tested_at,tested_by,meeting_id,result")
           .eq("meeting_id", meetingId)
           .in("entry_id", entryIds);
 
@@ -251,8 +254,8 @@ export default function RaceDayPage() {
           const driverName = entry.driver_name_raw
             ? entry.driver_name_raw
             : driverInfo
-              ? driverInfo.name
-              : "NOT DECLARED";
+            ? driverInfo.name
+            : "NOT DECLARED";
 
           return {
             entry_id: entry.id,
@@ -268,6 +271,7 @@ export default function RaceDayPage() {
             driver_phone: driverInfo?.phone || null,
             tested: !!test?.tested,
             tested_at: test?.tested_at || null,
+            result: test?.result || null,
           };
         })
         .sort((a, b) => {
@@ -292,6 +296,7 @@ export default function RaceDayPage() {
     entry_id: string;
     tested: boolean;
     tested_at: string | null;
+    result: "negative" | "positive" | null;
   }) {
     setRows((currentRows) =>
       currentRows.map((row) =>
@@ -300,13 +305,17 @@ export default function RaceDayPage() {
               ...row,
               tested: !!testRow.tested,
               tested_at: testRow.tested_at || null,
+              result: testRow.result || null,
             }
           : row
       )
     );
   }
 
-  async function toggleTest(row: Row) {
+  async function setResultForRow(
+    row: Row,
+    nextResult: "negative" | "positive" | null
+  ) {
     const {
       data: { session },
       error: sessionError,
@@ -330,8 +339,8 @@ export default function RaceDayPage() {
     const currentUserId = session.user.id;
     setUserId(currentUserId);
 
-    const newTestedValue = !row.tested;
-    const newTestedAt = newTestedValue ? new Date().toISOString() : null;
+    const newTestedValue = nextResult !== null;
+    const newTestedAt = nextResult !== null ? new Date().toISOString() : null;
 
     const relatedRows = rows.filter((currentRow) => {
       if (currentRow.scratched) return false;
@@ -355,6 +364,7 @@ export default function RaceDayPage() {
       tested: newTestedValue,
       tested_at: newTestedAt,
       tested_by: newTestedValue ? currentUserId : null,
+      result: nextResult,
     }));
 
     const { error } = await supabase
@@ -362,7 +372,7 @@ export default function RaceDayPage() {
       .upsert(payload, { onConflict: "meeting_id,entry_id" });
 
     if (error) {
-      console.error("Toggle test failed:", error);
+      console.error("Set result failed:", error);
 
       const message = (error.message || "").toLowerCase();
       const code = "code" in error ? String(error.code || "") : "";
@@ -374,8 +384,7 @@ export default function RaceDayPage() {
         message.includes("not authenticated") ||
         message.includes("invalid token") ||
         message.includes("permission denied") ||
-        message.includes("row-level security") ||
-        message.includes("42501")
+        message.includes("row-level security")
       ) {
         alert("Your session has expired or access was denied. Please log in again.");
         await supabase.auth.signOut();
@@ -398,6 +407,7 @@ export default function RaceDayPage() {
               ...currentRow,
               tested: newTestedValue,
               tested_at: newTestedAt,
+              result: nextResult,
             }
           : currentRow
       )
@@ -485,6 +495,11 @@ export default function RaceDayPage() {
                 "tested_at" in changed && changed.tested_at
                   ? String(changed.tested_at)
                   : null,
+              result:
+                "result" in changed &&
+                (changed.result === "negative" || changed.result === "positive")
+                  ? changed.result
+                  : null,
             });
           }
         }
@@ -564,20 +579,20 @@ export default function RaceDayPage() {
     return races.map((race) => {
       const raceRows = rowsByRace.get(race.race_number) || [];
 
-      const testableRows = raceRows.filter(
+      const resultableRows = raceRows.filter(
         (row) => !row.scratched && row.driver_name !== "NOT DECLARED"
       );
 
-      const testedCount = testableRows.filter((row) => row.tested).length;
-      const totalCount = testableRows.length;
-      const allTested = totalCount > 0 && testedCount === totalCount;
+      const completedCount = resultableRows.filter((row) => row.result !== null).length;
+      const totalCount = resultableRows.length;
+      const allDone = totalCount > 0 && completedCount === totalCount;
 
       return {
         raceId: race.id,
         raceNumber: race.race_number,
-        testedCount,
+        completedCount,
         totalCount,
-        allTested,
+        allDone,
       };
     });
   }, [races, rowsByRace]);
@@ -599,15 +614,15 @@ export default function RaceDayPage() {
                   liveStatus === "live"
                     ? "bg-green-100 text-green-700"
                     : liveStatus === "offline"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-yellow-100 text-yellow-700"
+                    ? "bg-red-100 text-red-700"
+                    : "bg-yellow-100 text-yellow-700"
                 }`}
               >
                 {liveStatus === "live"
                   ? "Live"
                   : liveStatus === "offline"
-                    ? "Offline"
-                    : "Connecting..."}
+                  ? "Offline"
+                  : "Connecting..."}
               </span>
             </div>
 
@@ -679,7 +694,7 @@ export default function RaceDayPage() {
                     </span>
 
                     <span className="text-muted-foreground">
-                      {item.allTested ? "✓" : `${item.testedCount}/${item.totalCount}`}
+                      {item.allDone ? "✓" : `${item.completedCount}/${item.totalCount}`}
                     </span>
                   </div>
                 );
@@ -710,13 +725,15 @@ export default function RaceDayPage() {
           races.map((race) => {
             const raceRows = rowsByRace.get(race.race_number) || [];
 
-            const testableRows = raceRows.filter(
+            const resultableRows = raceRows.filter(
               (row) => !row.scratched && row.driver_name !== "NOT DECLARED"
             );
 
-            const testedCount = testableRows.filter((row) => row.tested).length;
-            const totalCount = testableRows.length;
-            const allTested = totalCount > 0 && testedCount === totalCount;
+            const completedCount = resultableRows.filter(
+              (row) => row.result !== null
+            ).length;
+            const totalCount = resultableRows.length;
+            const allDone = totalCount > 0 && completedCount === totalCount;
             const raceColor = getRaceColor(race.race_number);
 
             return (
@@ -746,21 +763,21 @@ export default function RaceDayPage() {
 
                     <div className="min-w-[150px] space-y-2 text-right">
                       <div className="rounded-xl border bg-muted/40 px-4 py-3">
-                        {allTested ? (
+                        {allDone ? (
                           <>
                             <p className="text-sm font-medium text-green-600">
-                              All tested
+                              All results entered
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {testedCount} / {totalCount}
+                              {completedCount} / {totalCount}
                             </p>
                           </>
                         ) : (
                           <>
                             <p className="text-lg font-bold">
-                              {testedCount} / {totalCount}
+                              {completedCount} / {totalCount}
                             </p>
-                            <p className="text-xs text-muted-foreground">tested</p>
+                            <p className="text-xs text-muted-foreground">results entered</p>
                           </>
                         )}
                       </div>
@@ -793,9 +810,9 @@ export default function RaceDayPage() {
                             <th className="px-3 py-2 font-medium">Driver</th>
                             <th className="px-3 py-2 font-medium">ID Card</th>
                             <th className="px-3 py-2 font-medium">Phone</th>
-                            <th className="px-3 py-2 font-medium">Status</th>
-                            <th className="px-3 py-2 font-medium">Tested at</th>
-                            <th className="px-3 py-2 font-medium">Action</th>
+                            <th className="px-3 py-2 font-medium">Result</th>
+                            <th className="px-3 py-2 font-medium">Recorded at</th>
+                            <th className="px-3 py-2 font-medium">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -807,12 +824,14 @@ export default function RaceDayPage() {
                                 key={row.entry_id}
                                 className={`border-b align-middle ${
                                   row.scratched
-                                    ? "bg-gray-200 dark:bg-gray-900/40 opacity-70"
+                                    ? "bg-gray-200 opacity-70"
                                     : row.driver_name === "NOT DECLARED"
-                                      ? "bg-orange-100 dark:bg-orange-950/40"
-                                      : row.tested
-                                        ? "bg-green-50 dark:bg-green-950/20"
-                                        : ""
+                                    ? "bg-orange-100"
+                                    : row.result === "positive"
+                                    ? "bg-red-50"
+                                    : row.result === "negative"
+                                    ? "bg-green-50"
+                                    : ""
                                 }`}
                               >
                                 <td className="px-3 py-3">{row.gate ?? "—"}</td>
@@ -828,24 +847,26 @@ export default function RaceDayPage() {
                                   {row.scratched
                                     ? "—"
                                     : row.driver_id
-                                      ? row.driver_id_card || "No ID found"
-                                      : "No linked driver"}
+                                    ? row.driver_id_card || "No ID found"
+                                    : "No linked driver"}
                                 </td>
                                 <td className="px-3 py-3 text-muted-foreground">
                                   {row.scratched
                                     ? "—"
                                     : row.driver_id
-                                      ? row.driver_phone || "No phone found"
-                                      : "No linked driver"}
+                                    ? row.driver_phone || "No phone found"
+                                    : "No linked driver"}
                                 </td>
-                                <td className="px-3 py-3">
+                                <td className="px-3 py-3 font-medium">
                                   {row.scratched
                                     ? "Scratched"
                                     : row.driver_name === "NOT DECLARED"
-                                      ? "No driver"
-                                      : row.tested
-                                        ? "Tested"
-                                        : "Pending"}
+                                    ? "No driver"
+                                    : row.result === "negative"
+                                    ? "Negative"
+                                    : row.result === "positive"
+                                    ? "Positive"
+                                    : "Pending"}
                                 </td>
                                 <td className="px-3 py-3 text-muted-foreground">
                                   {row.tested_at
@@ -853,26 +874,54 @@ export default function RaceDayPage() {
                                     : "—"}
                                 </td>
                                 <td className="px-3 py-3">
-                                  <Button
-                                    variant={row.tested ? "default" : "outline"}
-                                    onClick={() => toggleTest(row)}
-                                    disabled={
-                                      isBusy ||
-                                      row.scratched ||
-                                      row.driver_name === "NOT DECLARED"
-                                    }
-                                    className="min-w-[120px]"
-                                  >
-                                    {row.scratched
-                                      ? "Scratched"
-                                      : row.driver_name === "NOT DECLARED"
-                                        ? "No driver"
-                                        : isBusy
-                                          ? "Saving..."
-                                          : row.tested
-                                            ? "Tested"
-                                            : "Mark tested"}
-                                  </Button>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      variant={
+                                        row.result === "negative" ? "default" : "outline"
+                                      }
+                                      onClick={() => setResultForRow(row, "negative")}
+                                      disabled={
+                                        isBusy ||
+                                        row.scratched ||
+                                        row.driver_name === "NOT DECLARED"
+                                      }
+                                      className="min-w-[96px]"
+                                    >
+                                      {isBusy && row.result !== "negative"
+                                        ? "Saving..."
+                                        : "Negative"}
+                                    </Button>
+
+                                    <Button
+                                      variant={
+                                        row.result === "positive" ? "destructive" : "outline"
+                                      }
+                                      onClick={() => setResultForRow(row, "positive")}
+                                      disabled={
+                                        isBusy ||
+                                        row.scratched ||
+                                        row.driver_name === "NOT DECLARED"
+                                      }
+                                      className="min-w-[96px]"
+                                    >
+                                      {isBusy && row.result !== "positive"
+                                        ? "Saving..."
+                                        : "Positive"}
+                                    </Button>
+
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => setResultForRow(row, null)}
+                                      disabled={
+                                        isBusy ||
+                                        row.scratched ||
+                                        row.driver_name === "NOT DECLARED"
+                                      }
+                                      className="min-w-[80px]"
+                                    >
+                                      Clear
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );
