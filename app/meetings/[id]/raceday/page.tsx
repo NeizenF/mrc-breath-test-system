@@ -887,31 +887,27 @@ export default function RaceDayPage() {
                                     : row.horse_name || "Unnamed horse"}
                                 </td>
                                 <td className="px-3 py-3">
-                                  {row.scratched ? "—" : row.driver_name}
+                                  {row.driver_name || "—"}
                                 </td>
                                 <td className="hidden px-3 py-3 text-muted-foreground md:table-cell">
-                                  {row.scratched
-                                    ? "—"
-                                    : row.driver_id
+                                  {row.driver_id
                                     ? row.driver_id_card || "No ID found"
-                                    : "No linked driver"}
+                                    : "—"}
                                 </td>
                                 <td className="hidden px-3 py-3 text-muted-foreground md:table-cell">
-                                  {row.scratched
-                                    ? "—"
-                                    : row.driver_id
+                                  {row.driver_id
                                     ? row.driver_phone || "No phone found"
-                                    : "No linked driver"}
+                                    : "—"}
                                 </td>
                                 <td className="px-3 py-3 font-medium">
-                                  {row.scratched
-                                    ? "Scratched"
-                                    : row.driver_name === "NOT DECLARED"
-                                    ? "No driver"
-                                    : row.result === "negative"
+                                  {row.result === "negative"
                                     ? "Negative"
                                     : row.result === "positive"
                                     ? "Positive"
+                                    : row.scratched
+                                    ? "Scratched"
+                                    : row.driver_name === "NOT DECLARED"
+                                    ? "No driver"
                                     : "Pending"}
                                 </td>
                                 <td className="hidden px-3 py-3 text-muted-foreground md:table-cell">

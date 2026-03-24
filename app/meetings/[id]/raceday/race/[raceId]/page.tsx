@@ -141,12 +141,12 @@ export default function EditRacePage() {
           ? driverMap.get(entry.driver_id)!
           : null;
 
-      const currentDriverName = entry.scratched
-        ? "—"
-        : entry.driver_name_raw
-          ? entry.driver_name_raw
-          : linkedDriver
-            ? linkedDriver.full_name
+      const currentDriverName = entry.driver_name_raw
+        ? entry.driver_name_raw
+        : linkedDriver
+          ? linkedDriver.full_name
+          : entry.scratched
+            ? "—"
             : "NOT DECLARED";
 
       return {
@@ -160,8 +160,8 @@ export default function EditRacePage() {
         driver_id: entry.driver_id || "",
         driver_name_raw: entry.driver_name_raw || "",
         current_driver_name: currentDriverName,
-        current_driver_id_card: entry.scratched ? null : linkedDriver?.id_card || null,
-        current_driver_phone: entry.scratched ? null : linkedDriver?.phone || null,
+        current_driver_id_card: linkedDriver?.id_card || null,
+        current_driver_phone: linkedDriver?.phone || null,
         driver_search: linkedDriver
           ? `${linkedDriver.full_name}${linkedDriver.id_card ? ` — ${linkedDriver.id_card}` : ""}`
           : "",
