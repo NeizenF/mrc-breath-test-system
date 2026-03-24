@@ -112,14 +112,12 @@ export default function MeetingDeclarationPage() {
       return;
     }
 
-    const entries = ((entriesData as EntryRow[]) || []).filter(
-      (entry) => !entry.scratched
-    );
+    const allEntries = (entriesData as EntryRow[]) || [];
 
     const driverIds = [
-      ...new Set(entries.map((e) => e.driver_id).filter(Boolean)),
+      ...new Set(allEntries.map((e) => e.driver_id).filter(Boolean)),
     ] as string[];
-    const entryIds = entries.map((e) => e.id);
+    const entryIds = allEntries.map((e) => e.id);
 
     let drivers: Driver[] = [];
     if (driverIds.length > 0) {
@@ -158,7 +156,8 @@ export default function MeetingDeclarationPage() {
     const testMap = new Map(tests.map((t) => [t.entry_id, t]));
     const grouped = new Map<string, DeclarationDriverRow>();
 
-    for (const entry of entries) {
+    for (const entry of allEntries) {
+      if (entry.scratched && !testMap.get(entry.id)?.tested) continue;
       const linkedDriver = entry.driver_id ? driverMap.get(entry.driver_id) : null;
 
       const driverName =
