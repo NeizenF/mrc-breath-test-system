@@ -869,7 +869,9 @@ export default function RaceDayPage() {
                               <tr
                                 key={row.entry_id}
                                 className={`border-b align-middle ${
-                                  row.scratched
+                                  row.scratched && row.result === "positive"
+                                    ? "bg-red-200 opacity-80"
+                                    : row.scratched
                                     ? "bg-gray-200 opacity-70"
                                     : row.driver_name === "NOT DECLARED"
                                     ? "bg-orange-100"
