@@ -206,6 +206,13 @@ export default function MeetingDeclarationPage() {
     setLoading(false);
   }
 
+  function renderBold(text: string) {
+    const parts = text.split(/\*\*(.*?)\*\*/g);
+    return parts.map((part, i) =>
+      i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+    );
+  }
+
   function resetEdits() {
     setEditTitle(meeting?.title || "");
     setEditDate(meeting?.meeting_date || "");
@@ -303,6 +310,7 @@ export default function MeetingDeclarationPage() {
             </div>
             <div className="space-y-1 md:col-span-2">
               <label className="text-sm font-medium">Additional notes (optional)</label>
+              <p className="text-xs text-gray-400">Wrap words in <code className="bg-gray-100 px-1 rounded">**double asterisks**</code> to make them <strong>bold</strong> in the letter.</p>
               <textarea
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
@@ -366,7 +374,7 @@ export default function MeetingDeclarationPage() {
           )}
 
           {editNotes.trim() && (
-            <p>{editNotes.trim()}</p>
+            <p>{renderBold(editNotes.trim())}</p>
           )}
 
           <p>This declaration is being issued for official record purposes.</p>
