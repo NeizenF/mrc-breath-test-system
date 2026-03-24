@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatDateLong } from "@/lib/formatters";
 
 type Meeting = {
@@ -53,6 +54,15 @@ export default function MeetingDeclarationPage() {
   const [rows, setRows] = useState<DeclarationDriverRow[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Editable fields
+  const [editMode, setEditMode] = useState(true);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editSignatory, setEditSignatory] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editPositives, setEditPositives] = useState<string[]>([]);
+  const [totalTested, setTotalTested] = useState(0);
+
   useEffect(() => {
     (async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -60,7 +70,6 @@ export default function MeetingDeclarationPage() {
         router.replace("/login");
         return;
       }
-
       await loadDeclarationData();
     })();
   }, [meetingId, router]);
@@ -95,8 +104,11 @@ export default function MeetingDeclarationPage() {
     const raceIds = races.map((r) => r.id);
 
     if (raceIds.length === 0) {
-      setMeeting(meetingData as Meeting);
+      const m = meetingData as Meeting;
+      setMeeting(m);
       setRows([]);
+      setEditTitle(m.title || "");
+      setEditDate(m.meeting_date || "");
       setLoading(false);
       return;
     }
@@ -113,7 +125,6 @@ export default function MeetingDeclarationPage() {
     }
 
     const allEntries = (entriesData as EntryRow[]) || [];
-
     const driverIds = [
       ...new Set(allEntries.map((e) => e.driver_id).filter(Boolean)),
     ] as string[];
@@ -131,7 +142,6 @@ export default function MeetingDeclarationPage() {
         setLoading(false);
         return;
       }
-
       drivers = (driversData as Driver[]) || [];
     }
 
@@ -148,7 +158,6 @@ export default function MeetingDeclarationPage() {
         setLoading(false);
         return;
       }
-
       tests = (testsData as TestRow[]) || [];
     }
 
@@ -158,11 +167,10 @@ export default function MeetingDeclarationPage() {
 
     for (const entry of allEntries) {
       if (entry.scratched && !testMap.get(entry.id)?.tested) continue;
-      const linkedDriver = entry.driver_id ? driverMap.get(entry.driver_id) : null;
 
+      const linkedDriver = entry.driver_id ? driverMap.get(entry.driver_id) : null;
       const driverName =
         entry.driver_name_raw || linkedDriver?.full_name || "NOT DECLARED";
-
       const key = entry.driver_id
         ? `driver:${entry.driver_id}`
         : `name:${driverName}`;
@@ -172,17 +180,10 @@ export default function MeetingDeclarationPage() {
       const existing = grouped.get(key);
 
       if (!existing) {
-        grouped.set(key, {
-          key,
-          driver_name: driverName,
-          result,
-        });
+        grouped.set(key, { key, driver_name: driverName, result });
       } else {
-        if (result === "positive") {
-          existing.result = "positive";
-        } else if (result === "negative" && existing.result !== "positive") {
-          existing.result = "negative";
-        }
+        if (result === "positive") existing.result = "positive";
+        else if (result === "negative" && existing.result !== "positive") existing.result = "negative";
       }
     }
 
@@ -190,29 +191,37 @@ export default function MeetingDeclarationPage() {
       a.driver_name.localeCompare(b.driver_name)
     );
 
-    setMeeting(meetingData as Meeting);
+    const testedCount = tests.filter((t) => t.tested).length;
+    const positiveNames = finalRows
+      .filter((r) => r.result === "positive")
+      .map((r) => r.driver_name);
+
+    const m = meetingData as Meeting;
+    setMeeting(m);
     setRows(finalRows);
+    setEditTitle(m.title || "");
+    setEditDate(m.meeting_date || "");
+    setTotalTested(testedCount);
+    setEditPositives(positiveNames);
     setLoading(false);
   }
 
-  const printableDate = useMemo(() => {
-    if (!meeting?.meeting_date) return "—";
-    return formatDateLong(meeting.meeting_date);
-  }, [meeting]);
-
-  const positiveDrivers = useMemo(() => {
-    return rows.filter((row) => row.result === "positive");
-  }, [rows]);
-
-  const pendingDrivers = useMemo(() => {
-    return rows.filter(
-      (row) => row.result === null && row.driver_name !== "NOT DECLARED"
+  function resetEdits() {
+    setEditTitle(meeting?.title || "");
+    setEditDate(meeting?.meeting_date || "");
+    setEditSignatory("");
+    setEditNotes("");
+    setEditPositives(
+      rows.filter((r) => r.result === "positive").map((r) => r.driver_name)
     );
-  }, [rows]);
+  }
 
-  const meetingTitle = useMemo(() => {
-    return meeting?.title?.trim() || "Unnamed Meeting";
-  }, [meeting]);
+  const printableDate = useMemo(() => {
+    if (!editDate) return "—";
+    return formatDateLong(editDate);
+  }, [editDate]);
+
+  const meetingTitle = editTitle.trim() || "Unnamed Meeting";
 
   if (loading) {
     return (
@@ -226,75 +235,103 @@ export default function MeetingDeclarationPage() {
     <div className="min-h-screen bg-white text-black">
       <style jsx global>{`
         @media print {
-          .no-print {
-            display: none !important;
-          }
-
-          body {
-            background: white !important;
-          }
-
-          @page {
-            size: A4;
-            margin: 22mm;
-          }
+          .no-print { display: none !important; }
+          body { background: white !important; }
+          @page { size: A4; margin: 22mm; }
         }
       `}</style>
 
+      {/* Toolbar */}
       <div className="no-print border-b px-6 py-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-lg font-semibold">Declaration letter</h1>
-            <p className="text-sm text-gray-600">
-              Print this as a separate official declaration.
-            </p>
+            <h1 className="text-lg font-semibold">Declaration Letter</h1>
+            <p className="text-sm text-gray-600">Edit fields below, then print or save as PDF.</p>
           </div>
-
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/meetings/${meetingId}`)}
-            >
-              Back
+            <Button variant="outline" onClick={() => router.push(`/meetings/${meetingId}`)}>Back</Button>
+            <Button variant="outline" onClick={() => router.push(`/meetings/${meetingId}/print`)}>Checklist</Button>
+            <Button variant="outline" onClick={() => setEditMode((p) => !p)}>
+              {editMode ? "Preview" : "Edit"}
             </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/meetings/${meetingId}/print`)}
-            >
-              Checklist
-            </Button>
-
+            <Button variant="outline" onClick={resetEdits}>Reset</Button>
             <Button onClick={() => window.print()}>Print / Save PDF</Button>
           </div>
         </div>
+
+        {editMode && (
+          <div className="grid gap-4 rounded-lg border bg-slate-50 p-4 md:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Meeting title</label>
+              <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Meeting title" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Meeting date</label>
+              <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Total drivers tested</label>
+              <Input
+                type="number"
+                value={totalTested}
+                onChange={(e) => setTotalTested(Number(e.target.value))}
+                placeholder="e.g. 12"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Authorized signatory name</label>
+              <Input value={editSignatory} onChange={(e) => setEditSignatory(e.target.value)} placeholder="e.g. John Doe" />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-sm font-medium">
+                Positive driver(s) — one per line
+              </label>
+              <textarea
+                value={editPositives.join("\n")}
+                onChange={(e) =>
+                  setEditPositives(
+                    e.target.value === "" ? [] : e.target.value.split("\n")
+                  )
+                }
+                placeholder="Driver name&#10;Another driver"
+                rows={Math.max(2, editPositives.length + 1)}
+                className="w-full rounded-md border bg-white px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              />
+              <p className="text-xs text-gray-400">
+                Auto-filled from test results. Edit freely — these are only for the printout.
+              </p>
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-sm font-medium">Additional notes (optional)</label>
+              <textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Any additional information to include..."
+                rows={3}
+                className="w-full rounded-md border bg-white px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Printable letter */}
       <div className="mx-auto max-w-[900px] px-8 py-10">
         <div className="mb-10 flex items-start gap-4 border-b-2 border-slate-300 pb-6">
-          <img
-            src="/mrc-logo.jpg"
-            alt="MRC Logo"
-            className="h-16 w-16 object-contain"
-          />
-
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/mrc-logo.jpg" alt="MRC Logo" className="h-16 w-16 object-contain" />
           <div className="flex-1">
-            <div className="text-[20px] font-bold uppercase tracking-wide text-slate-800">
-              Malta Racing Club
-            </div>
-            <div className="mt-1 text-[15px] font-semibold text-slate-700">
-              Official Breathalyzer Declaration
-            </div>
+            <div className="text-[20px] font-bold uppercase tracking-wide text-slate-800">Malta Racing Club</div>
+            <div className="mt-1 text-[15px] font-semibold text-slate-700">Official Breathalyzer Declaration</div>
           </div>
         </div>
 
         <div className="mb-8 space-y-2 text-[14px] leading-relaxed">
-          <div>
-            <span className="font-semibold">Meeting:</span> {meetingTitle}
-          </div>
-          <div>
-            <span className="font-semibold">Date:</span> {printableDate}
-          </div>
+          <div><span className="font-semibold">Meeting:</span> {meetingTitle}</div>
+          <div><span className="font-semibold">Date:</span> {printableDate}</div>
+          {totalTested > 0 && (
+            <div><span className="font-semibold">Total drivers tested:</span> {totalTested}</div>
+          )}
         </div>
 
         <div className="space-y-5 text-[15px] leading-8 text-slate-900">
@@ -303,29 +340,16 @@ export default function MeetingDeclarationPage() {
             to the above-mentioned meeting of the Malta Racing Club.
           </p>
 
-          {pendingDrivers.length > 0 ? (
-            <>
-              <p>
-                At the time of issuing this declaration, the testing record is
-                <strong> not yet complete</strong>, as one or more drivers remain
-                without a recorded final result.
-              </p>
-
-              <p>
-                Accordingly, no final declaration is being made at this stage as to
-                whether all drivers returned negative results.
-              </p>
-            </>
-          ) : positiveDrivers.length === 0 ? (
+          {editPositives.filter((n) => n.trim()).length === 0 ? (
             <p>
-              Following the administration of the said tests, <strong>no drivers
-              returned a positive result</strong>.
+              Following the administration of the said tests,{" "}
+              <strong>no drivers returned a positive result</strong>.
             </p>
-          ) : positiveDrivers.length === 1 ? (
+          ) : editPositives.filter((n) => n.trim()).length === 1 ? (
             <p>
               Following the administration of the said tests, the following driver
               returned a <strong>positive result</strong>:{" "}
-              <strong>{positiveDrivers[0].driver_name}</strong>.
+              <strong>{editPositives[0].trim()}</strong>.
             </p>
           ) : (
             <div className="space-y-3">
@@ -333,29 +357,26 @@ export default function MeetingDeclarationPage() {
                 Following the administration of the said tests, the following
                 drivers returned <strong>positive results</strong>:
               </p>
-
               <ul className="list-disc pl-8">
-                {positiveDrivers.map((driver) => (
-                  <li key={driver.key}>{driver.driver_name}</li>
+                {editPositives.filter((n) => n.trim()).map((name, i) => (
+                  <li key={i}>{name.trim()}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          <p>
-            This declaration is being issued for official record purposes.
-          </p>
+          {editNotes.trim() && (
+            <p>{editNotes.trim()}</p>
+          )}
+
+          <p>This declaration is being issued for official record purposes.</p>
         </div>
 
         <div className="mt-16">
-          <img
-            src="/signature.png"
-            alt="Signature"
-            className="mb-2 h-20 object-contain"
-          />
-
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/signature.png" alt="Signature" className="mb-2 h-20 object-contain" />
           <div className="w-[260px] border-t border-slate-400 pt-2 text-[14px]">
-            Authorized Signature
+            {editSignatory.trim() || "Authorized Signature"}
           </div>
         </div>
       </div>
