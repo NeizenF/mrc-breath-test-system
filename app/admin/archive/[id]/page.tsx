@@ -209,7 +209,8 @@ export default function ArchiveMeetingDetailPage() {
         const driverMap = new Map<string, DriverRow>();
 
         for (const entry of entries) {
-          if (entry.scratched) continue;
+          // Skip scratched entries unless they have a test result (e.g. replaced drivers)
+          if (entry.scratched && !entry.tested) continue;
 
           const driverKey = getDriverKey(entry);
           if (!driverKey) continue;
