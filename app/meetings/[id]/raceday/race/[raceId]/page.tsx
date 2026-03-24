@@ -361,26 +361,26 @@ export default function EditRacePage() {
   async function replaceDriver(row: EditableRow) {
     setReplaceConfirmEntry(null);
 
-    // Get all current gates so we can pick a safe placeholder and maxGate
-    const { data: gateData } = await supabase
-      .from("entries")
-      .select("gate")
-      .eq("race_id", raceId);
-
-    const allGates = ((gateData || []).map((e) => e.gate).filter((g) => g != null) as number[]);
-    const maxGate = Math.max(0, ...allGates);
-
-    // Scratch the old entry and move its gate to a placeholder (maxGate + 500)
-    // so the original gate number is freed up for the new entry to use
+    // Scratch the old entry (gate stays as-is; partial unique index allows scratched duplicates)
     const { error: scratchError } = await supabase
       .from("entries")
-      .update({ scratched: true, gate: maxGate + 500 })
+      .update({ scratched: true })
       .eq("id", row.entry_id);
 
     if (scratchError) {
       toast.error(scratchError.message);
       return;
     }
+
+    const { data: gateData } = await supabase
+      .from("entries")
+      .select("gate")
+      .eq("race_id", raceId);
+
+    const maxGate = Math.max(
+      0,
+      ...((gateData || []).map((e) => e.gate).filter((g) => g != null) as number[])
+    );
 
     const { error: insertError } = await supabase.from("entries").insert({
       race_id: raceId,
