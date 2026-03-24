@@ -268,6 +268,39 @@ export default function ArchiveMeetingDetailPage() {
     };
   }, [meetingId, router]);
 
+  function downloadCSV() {
+    const label = getMeetingLabel(meeting);
+    const dateStr = meeting?.meeting_date
+      ? new Date(meeting.meeting_date).toISOString().slice(0, 10)
+      : "unknown-date";
+    const filename = `${label.replace(/[^a-z0-9]/gi, "_")}_${dateStr}.csv`;
+
+    const header = ["Driver Name", "Races", "Result"];
+    const rows = drivers.map((d) => [
+      d.name,
+      d.raceNumbers.join("; "),
+      d.result === "positive"
+        ? "Positive"
+        : d.result === "negative"
+        ? "Negative"
+        : d.tested
+        ? "Tested"
+        : "Not tested",
+    ]);
+
+    const csv = [header, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const summary = useMemo(() => {
     const totalDrivers = drivers.length;
     const testedDrivers = drivers.filter((d) => d.tested).length;
@@ -309,6 +342,12 @@ export default function ArchiveMeetingDetailPage() {
           <Button asChild variant="outline">
             <Link href="/admin/archive">Back to Archive</Link>
           </Button>
+
+          {!loading && meeting && (
+            <Button variant="outline" onClick={downloadCSV}>
+              Export CSV
+            </Button>
+          )}
 
           {meetingId && (
             <Button asChild variant="outline">
