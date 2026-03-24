@@ -351,7 +351,13 @@ export default function ArchiveMeetingDetailPage() {
 
           {meetingId && (
             <Button asChild variant="outline">
-              <Link href={`/meetings/${meetingId}/print`}>Print Report</Link>
+              <Link href={`/meetings/${meetingId}/summary`}>Summary Report</Link>
+            </Button>
+          )}
+
+          {meetingId && (
+            <Button asChild variant="outline">
+              <Link href={`/meetings/${meetingId}/print`}>Print Checklist</Link>
             </Button>
           )}
 
