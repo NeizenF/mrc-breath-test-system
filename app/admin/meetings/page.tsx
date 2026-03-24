@@ -6,6 +6,10 @@ import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "sonner";
+import { PageHeader } from "@/components/pageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Meeting = {
   id: string;
@@ -35,6 +39,8 @@ export default function MeetingsPage() {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function loadMeetings() {
     setLoading(true);
@@ -96,13 +102,8 @@ export default function MeetingsPage() {
     };
   }, [router]);
 
-  async function handleArchiveMeeting(meetingId: string) {
-    const confirmed = window.confirm(
-      "Archive this meeting?\n\nIt will be removed from Meetings and shown in Archive."
-    );
-
-    if (!confirmed) return;
-
+  async function doArchiveMeeting(meetingId: string) {
+    setConfirmArchiveId(null);
     setArchivingId(meetingId);
 
     try {
@@ -116,7 +117,7 @@ export default function MeetingsPage() {
       setMeetings((prev) => prev.filter((m) => m.id !== meetingId));
     } catch (error) {
       console.error("Archive meeting failed:", error);
-      alert(
+      toast.error(
         error instanceof Error
           ? error.message
           : "Failed to archive meeting. Check console for details."
@@ -126,13 +127,8 @@ export default function MeetingsPage() {
     }
   }
 
-  async function handleDeleteMeeting(meetingId: string) {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this meeting?\n\nThis will also delete its races, entries, and tests."
-    );
-
-    if (!confirmed) return;
-
+  async function doDeleteMeeting(meetingId: string) {
+    setConfirmDeleteId(null);
     setDeletingId(meetingId);
 
     try {
@@ -186,7 +182,7 @@ export default function MeetingsPage() {
       router.refresh();
     } catch (error) {
       console.error("Delete meeting failed:", error);
-      alert(
+      toast.error(
         error instanceof Error
           ? error.message
           : "Failed to delete meeting. Check console for details."
@@ -198,37 +194,49 @@ export default function MeetingsPage() {
 
   if (checkingAccess) {
     return (
-      <div className="p-4 md:p-6">
-        <div className="text-sm text-muted-foreground">
-          Checking admin access...
+      <div className="p-4 md:p-6 space-y-6">
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-36" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-32" />
+          </div>
         </div>
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-24 w-full rounded-xl" />
+        ))}
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-6">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Meetings</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your active race meetings
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push("/admin/archive")}>
-            Archive
-          </Button>
-
-          <Button onClick={() => router.push("/meetings/new")}>
-            New Meeting
-          </Button>
-        </div>
+      <div className="mb-6">
+        <PageHeader
+          title="Meetings"
+          subtitle="Manage your active race meetings."
+          actions={
+            <>
+              <Button variant="outline" onClick={() => router.push("/admin/archive")}>
+                Archive
+              </Button>
+              <Button onClick={() => router.push("/meetings/new")}>
+                New Meeting
+              </Button>
+            </>
+          }
+        />
       </div>
 
       {loading ? (
-        <div className="text-sm text-muted-foreground">Loading meetings...</div>
+        <div className="grid gap-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
       ) : meetings.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -282,7 +290,7 @@ export default function MeetingsPage() {
                   <Button
                     variant="outline"
                     disabled={archivingId === meeting.id}
-                    onClick={() => handleArchiveMeeting(meeting.id)}
+                    onClick={() => setConfirmArchiveId(meeting.id)}
                   >
                     {archivingId === meeting.id ? "Archiving..." : "Archive"}
                   </Button>
@@ -290,7 +298,7 @@ export default function MeetingsPage() {
                   <Button
                     variant="destructive"
                     disabled={deletingId === meeting.id}
-                    onClick={() => handleDeleteMeeting(meeting.id)}
+                    onClick={() => setConfirmDeleteId(meeting.id)}
                   >
                     {deletingId === meeting.id ? "Deleting..." : "Delete"}
                   </Button>
@@ -300,6 +308,25 @@ export default function MeetingsPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmArchiveId !== null}
+        title="Archive meeting?"
+        description="This meeting will be removed from Meetings and shown in Archive."
+        confirmLabel="Archive"
+        onConfirm={() => confirmArchiveId && doArchiveMeeting(confirmArchiveId)}
+        onCancel={() => setConfirmArchiveId(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Delete meeting?"
+        description="This will permanently delete the meeting along with all its races, entries, and tests."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => confirmDeleteId && doDeleteMeeting(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

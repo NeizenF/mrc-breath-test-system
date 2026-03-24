@@ -7,6 +7,7 @@ import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 export default function NewMeetingPage() {
   const router = useRouter();
@@ -73,7 +74,7 @@ export default function NewMeetingPage() {
     setSaving(false);
 
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
 

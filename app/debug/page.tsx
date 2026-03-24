@@ -23,7 +23,7 @@ export default function DebugPage() {
   }, []);
 
   return (
-    <div className="min-h-screen p-6 bg-muted/30">
+    <div className="min-h-screen p-6 bg-slate-100 dark:bg-slate-900">
       <div className="max-w-3xl mx-auto space-y-6">
         <Card>
           <CardHeader>

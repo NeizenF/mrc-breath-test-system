@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 type Meeting = {
   id: string;
@@ -106,7 +107,9 @@ function getRaceColor(raceNumber: number) {
 export default function RaceDayPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const meetingId = params.id;
+  const scrolledRef = useRef(false);
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [allMeetings, setAllMeetings] = useState<Meeting[]>([]);
@@ -148,7 +151,7 @@ export default function RaceDayPage() {
       .single();
 
     if (meetingError) {
-      alert(meetingError.message);
+      toast.error(meetingError.message);
       setMeeting(null);
       setRaces([]);
       setLoading(false);
@@ -162,7 +165,7 @@ export default function RaceDayPage() {
       .order("race_number", { ascending: true });
 
     if (raceError) {
-      alert(raceError.message);
+      toast.error(raceError.message);
       setMeeting(meetingData as Meeting);
       setRaces([]);
       setLoading(false);
@@ -192,7 +195,7 @@ export default function RaceDayPage() {
         .order("gate", { ascending: true });
 
       if (entriesError) {
-        alert(entriesError.message);
+        toast.error(entriesError.message);
         setLoading(false);
         return;
       }
@@ -323,14 +326,14 @@ export default function RaceDayPage() {
 
     if (sessionError) {
       console.error("Failed to read session:", sessionError);
-      alert("Could not verify your session. Please log in again.");
+      toast.error("Could not verify your session. Please log in again.");
       await supabase.auth.signOut();
       router.replace("/");
       return;
     }
 
     if (!session?.user?.id) {
-      alert("Your session has expired. Please log in again.");
+      toast.error("Your session has expired. Please log in again.");
       await supabase.auth.signOut();
       router.replace("/");
       return;
@@ -386,14 +389,14 @@ export default function RaceDayPage() {
         message.includes("permission denied") ||
         message.includes("row-level security")
       ) {
-        alert("Your session has expired or access was denied. Please log in again.");
+        toast.error("Your session has expired or access was denied. Please log in again.");
         await supabase.auth.signOut();
         router.replace("/");
         setBusyEntryIds([]);
         return;
       }
 
-      alert(error.message);
+      toast.error(error.message);
       setBusyEntryIds([]);
       return;
     }
@@ -463,6 +466,17 @@ export default function RaceDayPage() {
       setLoading(false);
     }
   }, [races, meetingId, loadAllRaceData]);
+
+  useEffect(() => {
+    if (loading || scrolledRef.current) return;
+    const raceParam = searchParams.get("race");
+    if (!raceParam) return;
+    const el = document.getElementById(`race-${raceParam}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrolledRef.current = true;
+    }
+  }, [loading, searchParams]);
 
   useEffect(() => {
     if (!meetingId) return;
@@ -603,26 +617,42 @@ export default function RaceDayPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-6">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-semibold">{heading}</h1>
-              <span
-                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                  liveStatus === "live"
-                    ? "bg-green-100 text-green-700"
+              <span className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  {liveStatus === "live" && (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                  )}
+                  <span
+                    className={`relative inline-flex h-2 w-2 rounded-full ${
+                      liveStatus === "live"
+                        ? "bg-green-500"
+                        : liveStatus === "offline"
+                        ? "bg-red-500"
+                        : "bg-yellow-400"
+                    }`}
+                  />
+                </span>
+                <span
+                  className={`text-xs font-medium ${
+                    liveStatus === "live"
+                      ? "text-green-700"
+                      : liveStatus === "offline"
+                      ? "text-red-700"
+                      : "text-yellow-700"
+                  }`}
+                >
+                  {liveStatus === "live"
+                    ? "Live"
                     : liveStatus === "offline"
-                    ? "bg-red-100 text-red-700"
-                    : "bg-yellow-100 text-yellow-700"
-                }`}
-              >
-                {liveStatus === "live"
-                  ? "Live"
-                  : liveStatus === "offline"
-                  ? "Offline"
-                  : "Connecting..."}
+                    ? "Offline"
+                    : "Connecting..."}
+                </span>
               </span>
             </div>
 
@@ -642,6 +672,12 @@ export default function RaceDayPage() {
           </div>
         </div>
 
+        {meeting?.is_archived && (
+          <div className="rounded-lg border border-yellow-300 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-300">
+            This meeting is archived. Results are read-only.
+          </div>
+        )}
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
@@ -653,19 +689,24 @@ export default function RaceDayPage() {
                 id="meeting-select"
                 value={meetingId}
                 onChange={(e) => handleMeetingChange(e.target.value)}
-                disabled={meetingsLoading || allMeetings.length === 0}
+                disabled={meetingsLoading}
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:max-w-md"
               >
                 {meetingsLoading ? (
                   <option value={meetingId}>Loading meetings...</option>
-                ) : allMeetings.length === 0 ? (
-                  <option value={meetingId}>No meetings found</option>
                 ) : (
-                  allMeetings.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {formatMeetingLabel(item)}
-                    </option>
-                  ))
+                  <>
+                    {meeting && !allMeetings.find((m) => m.id === meetingId) && (
+                      <option value={meetingId}>
+                        {formatMeetingLabel(meeting)} (archived)
+                      </option>
+                    )}
+                    {allMeetings.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {formatMeetingLabel(item)}
+                      </option>
+                    ))}
+                  </>
                 )}
               </select>
             </div>
@@ -682,16 +723,21 @@ export default function RaceDayPage() {
 
                 return (
                   <div key={item.raceId} className="flex items-center gap-2">
-                    <span
-                      className="inline-flex min-w-[42px] items-center justify-center rounded-md border px-2 py-1 text-xs font-bold"
+                    <button
+                      className="inline-flex min-w-[42px] items-center justify-center rounded-md border px-2 py-1 text-xs font-bold transition-opacity hover:opacity-75"
                       style={{
                         backgroundColor: raceColor.bg,
                         color: raceColor.text,
                         borderColor: raceColor.border,
                       }}
+                      onClick={() => {
+                        document
+                          .getElementById(`race-${item.raceNumber}`)
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
                     >
                       R{item.raceNumber}
-                    </span>
+                    </button>
 
                     <span className="text-muted-foreground">
                       {item.allDone ? "✓" : `${item.completedCount}/${item.totalCount}`}
@@ -737,7 +783,7 @@ export default function RaceDayPage() {
             const raceColor = getRaceColor(race.race_number);
 
             return (
-              <Card key={race.id}>
+              <Card key={race.id} id={`race-${race.race_number}`}>
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-3">
@@ -808,10 +854,10 @@ export default function RaceDayPage() {
                             <th className="px-3 py-2 font-medium">Gate</th>
                             <th className="px-3 py-2 font-medium">Horse</th>
                             <th className="px-3 py-2 font-medium">Driver</th>
-                            <th className="px-3 py-2 font-medium">ID Card</th>
-                            <th className="px-3 py-2 font-medium">Phone</th>
+                            <th className="hidden px-3 py-2 font-medium md:table-cell">ID Card</th>
+                            <th className="hidden px-3 py-2 font-medium md:table-cell">Phone</th>
                             <th className="px-3 py-2 font-medium">Result</th>
-                            <th className="px-3 py-2 font-medium">Recorded at</th>
+                            <th className="hidden px-3 py-2 font-medium md:table-cell">Recorded at</th>
                             <th className="px-3 py-2 font-medium">Actions</th>
                           </tr>
                         </thead>
@@ -843,14 +889,14 @@ export default function RaceDayPage() {
                                 <td className="px-3 py-3">
                                   {row.scratched ? "—" : row.driver_name}
                                 </td>
-                                <td className="px-3 py-3 text-muted-foreground">
+                                <td className="hidden px-3 py-3 text-muted-foreground md:table-cell">
                                   {row.scratched
                                     ? "—"
                                     : row.driver_id
                                     ? row.driver_id_card || "No ID found"
                                     : "No linked driver"}
                                 </td>
-                                <td className="px-3 py-3 text-muted-foreground">
+                                <td className="hidden px-3 py-3 text-muted-foreground md:table-cell">
                                   {row.scratched
                                     ? "—"
                                     : row.driver_id
@@ -868,7 +914,7 @@ export default function RaceDayPage() {
                                     ? "Positive"
                                     : "Pending"}
                                 </td>
-                                <td className="px-3 py-3 text-muted-foreground">
+                                <td className="hidden px-3 py-3 text-muted-foreground md:table-cell">
                                   {row.tested_at
                                     ? new Date(row.tested_at).toLocaleTimeString()
                                     : "—"}
@@ -937,4 +983,4 @@ export default function RaceDayPage() {
       </div>
     </div>
   );
-}
+} 

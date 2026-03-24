@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDateLong } from "@/lib/formatters";
@@ -94,7 +95,7 @@ export default function MeetingPrintPage() {
       .single();
 
     if (meetingError) {
-      alert(meetingError.message);
+      toast.error(meetingError.message);
       setLoading(false);
       return;
     }
@@ -105,7 +106,7 @@ export default function MeetingPrintPage() {
       .eq("meeting_id", meetingId);
 
     if (racesError) {
-      alert(racesError.message);
+      toast.error(racesError.message);
       setLoading(false);
       return;
     }
@@ -130,29 +131,27 @@ export default function MeetingPrintPage() {
       .in("race_id", raceIds);
 
     if (entriesError) {
-      alert(entriesError.message);
+      toast.error(entriesError.message);
       setLoading(false);
       return;
     }
 
-    const entries = ((entriesData as EntryRow[]) || []).filter(
-      (entry) => !entry.scratched
-    );
+    const allEntries = (entriesData as EntryRow[]) || [];
+    const allEntryIds = allEntries.map((e) => e.id);
 
-    const driverIds = [
-      ...new Set(entries.map((e) => e.driver_id).filter(Boolean)),
+    const allDriverIds = [
+      ...new Set(allEntries.map((e) => e.driver_id).filter(Boolean)),
     ] as string[];
-    const entryIds = entries.map((e) => e.id);
 
     let drivers: Driver[] = [];
-    if (driverIds.length > 0) {
+    if (allDriverIds.length > 0) {
       const { data: driversData, error: driversError } = await supabase
         .from("drivers")
         .select("id,full_name,id_card,phone")
-        .in("id", driverIds);
+        .in("id", allDriverIds);
 
       if (driversError) {
-        alert(driversError.message);
+        toast.error(driversError.message);
         setLoading(false);
         return;
       }
@@ -161,15 +160,15 @@ export default function MeetingPrintPage() {
     }
 
     let tests: TestRow[] = [];
-    if (entryIds.length > 0) {
+    if (allEntryIds.length > 0) {
       const { data: testsData, error: testsError } = await supabase
         .from("tests")
         .select("id,entry_id,tested,result")
         .eq("meeting_id", meetingId)
-        .in("entry_id", entryIds);
+        .in("entry_id", allEntryIds);
 
       if (testsError) {
-        alert(testsError.message);
+        toast.error(testsError.message);
         setLoading(false);
         return;
       }
@@ -177,8 +176,14 @@ export default function MeetingPrintPage() {
       tests = (testsData as TestRow[]) || [];
     }
 
-    const driverMap = new Map(drivers.map((d) => [d.id, d]));
     const testMap = new Map(tests.map((t) => [t.entry_id, t]));
+
+    // Include non-scratched entries + scratched entries that have a test result
+    const entries = allEntries.filter(
+      (entry) => !entry.scratched || testMap.has(entry.id)
+    );
+
+    const driverMap = new Map(drivers.map((d) => [d.id, d]));
     const grouped = new Map<string, PrintDriverRow>();
 
     for (const entry of entries) {
@@ -297,8 +302,17 @@ export default function MeetingPrintPage() {
 
           @page {
             size: A4 landscape;
-            margin: 10mm;
+            margin: 12mm 10mm 18mm 10mm;
           }
+
+          thead {
+            display: table-header-group;
+          }
+
+          tr {
+            page-break-inside: avoid;
+          }
+
         }
       `}</style>
 
@@ -451,86 +465,106 @@ export default function MeetingPrintPage() {
                 </td>
               </tr>
             ) : (
-              editableRows.map((row, index) => (
-                <tr
-                  key={row.key}
-                  className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}
-                >
-                  <td className="border border-slate-300 px-3 py-2">
-                    {editMode ? (
-                      <Input
-                        value={row.driver_name}
-                        onChange={(e) =>
-                          updateEditableRow(row.key, "driver_name", e.target.value)
-                        }
-                        className="h-7 border-0 bg-transparent p-0 text-[12px] shadow-none focus-visible:ring-0"
-                      />
-                    ) : (
-                      row.driver_name
-                    )}
-                  </td>
+              editableRows.map((row, index) => {
+                const rowBg =
+                  row.result === "positive"
+                    ? "bg-red-50"
+                    : row.result === "negative"
+                    ? "bg-green-50"
+                    : row.result === null
+                    ? "bg-yellow-50"
+                    : index % 2 === 0
+                    ? "bg-white"
+                    : "bg-slate-50";
 
-                  <td className="border border-slate-300 px-3 py-2">
-                    {editMode ? (
-                      <Input
-                        value={row.id_card}
-                        onChange={(e) =>
-                          updateEditableRow(row.key, "id_card", e.target.value)
-                        }
-                        className="h-7 border-0 bg-transparent p-0 text-[12px] shadow-none focus-visible:ring-0"
-                      />
-                    ) : (
-                      row.id_card || "—"
-                    )}
-                  </td>
+                return (
+                  <tr key={row.key} className={rowBg}>
+                    <td className="border border-slate-300 px-3 py-2">
+                      {editMode ? (
+                        <Input
+                          value={row.driver_name}
+                          onChange={(e) =>
+                            updateEditableRow(row.key, "driver_name", e.target.value)
+                          }
+                          className="h-7 border-0 bg-transparent p-0 text-[12px] shadow-none focus-visible:ring-0"
+                        />
+                      ) : (
+                        row.driver_name
+                      )}
+                    </td>
 
-                  <td className="border border-slate-300 px-3 py-2">
-                    {editMode ? (
-                      <Input
-                        value={row.phone}
-                        onChange={(e) =>
-                          updateEditableRow(row.key, "phone", e.target.value)
-                        }
-                        className="h-7 border-0 bg-transparent p-0 text-[12px] shadow-none focus-visible:ring-0"
-                      />
-                    ) : (
-                      row.phone || "—"
-                    )}
-                  </td>
+                    <td className="border border-slate-300 px-3 py-2">
+                      {editMode ? (
+                        <Input
+                          value={row.id_card}
+                          onChange={(e) =>
+                            updateEditableRow(row.key, "id_card", e.target.value)
+                          }
+                          className="h-7 border-0 bg-transparent p-0 text-[12px] shadow-none focus-visible:ring-0"
+                        />
+                      ) : (
+                        row.id_card || "—"
+                      )}
+                    </td>
 
-                  <td className="border border-slate-300 px-3 py-2 text-center">
-                    {editMode ? (
-                      <select
-                        value={row.result || ""}
-                        onChange={(e) =>
-                          updateEditableRow(
-                            row.key,
-                            "result",
-                            e.target.value === ""
-                              ? null
-                              : (e.target.value as "negative" | "positive")
-                          )
-                        }
-                        className="rounded border px-2 py-1 text-[12px]"
-                      >
-                        <option value="">Pending</option>
-                        <option value="negative">Negative</option>
-                        <option value="positive">Positive</option>
-                      </select>
-                    ) : row.result === "negative" ? (
-                      <span className="font-semibold text-green-700">Negative</span>
-                    ) : row.result === "positive" ? (
-                      <span className="font-semibold text-red-700">Positive</span>
-                    ) : (
-                      <span className="text-slate-500">Pending</span>
-                    )}
-                  </td>
-                </tr>
-              ))
+                    <td className="border border-slate-300 px-3 py-2">
+                      {editMode ? (
+                        <Input
+                          value={row.phone}
+                          onChange={(e) =>
+                            updateEditableRow(row.key, "phone", e.target.value)
+                          }
+                          className="h-7 border-0 bg-transparent p-0 text-[12px] shadow-none focus-visible:ring-0"
+                        />
+                      ) : (
+                        row.phone || "—"
+                      )}
+                    </td>
+
+                    <td
+                      className={`border border-slate-300 px-3 py-2 text-center font-semibold ${
+                        row.result === "negative"
+                          ? "bg-green-100 text-green-800"
+                          : row.result === "positive"
+                          ? "bg-red-100 text-red-800"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {editMode ? (
+                        <select
+                          value={row.result || ""}
+                          onChange={(e) =>
+                            updateEditableRow(
+                              row.key,
+                              "result",
+                              e.target.value === ""
+                                ? null
+                                : (e.target.value as "negative" | "positive")
+                            )
+                          }
+                          className="rounded border px-2 py-1 text-[12px]"
+                        >
+                          <option value="">Pending</option>
+                          <option value="negative">Negative</option>
+                          <option value="positive">Positive</option>
+                        </select>
+                      ) : row.result === "negative" ? (
+                        "Negative"
+                      ) : row.result === "positive" ? (
+                        "Positive"
+                      ) : (
+                        "Pending"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+
+
     </div>
   );
 }

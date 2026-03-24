@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,7 +63,7 @@ export default function EditMeetingPage() {
         if (!mounted) return;
 
         if (error || !data) {
-          alert(error?.message || "Meeting not found.");
+          toast.error(error?.message || "Meeting not found.");
           router.replace("/admin/meetings");
           return;
         }
@@ -101,7 +102,7 @@ export default function EditMeetingPage() {
     setSaving(false);
 
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
 
@@ -128,7 +129,7 @@ export default function EditMeetingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-4 md:p-6">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-4 md:p-6">
       <div className="mx-auto max-w-2xl">
         <Card>
           <CardHeader>

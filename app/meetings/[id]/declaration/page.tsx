@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { formatDateLong } from "@/lib/formatters";
 
@@ -74,7 +75,7 @@ export default function MeetingDeclarationPage() {
       .single();
 
     if (meetingError) {
-      alert(meetingError.message);
+      toast.error(meetingError.message);
       setLoading(false);
       return;
     }
@@ -85,7 +86,7 @@ export default function MeetingDeclarationPage() {
       .eq("meeting_id", meetingId);
 
     if (racesError) {
-      alert(racesError.message);
+      toast.error(racesError.message);
       setLoading(false);
       return;
     }
@@ -106,7 +107,7 @@ export default function MeetingDeclarationPage() {
       .in("race_id", raceIds);
 
     if (entriesError) {
-      alert(entriesError.message);
+      toast.error(entriesError.message);
       setLoading(false);
       return;
     }
@@ -128,7 +129,7 @@ export default function MeetingDeclarationPage() {
         .in("id", driverIds);
 
       if (driversError) {
-        alert(driversError.message);
+        toast.error(driversError.message);
         setLoading(false);
         return;
       }
@@ -145,7 +146,7 @@ export default function MeetingDeclarationPage() {
         .in("entry_id", entryIds);
 
       if (testsError) {
-        alert(testsError.message);
+        toast.error(testsError.message);
         setLoading(false);
         return;
       }

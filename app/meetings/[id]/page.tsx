@@ -8,6 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDateLong } from "@/lib/formatters";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 type Meeting = {
   id: string;
@@ -49,6 +58,10 @@ export default function MeetingDetailPage() {
   const [updatingMrc, setUpdatingMrc] = useState(false);
   const [bulkImporting, setBulkImporting] = useState(false);
   const [bulkUrls, setBulkUrls] = useState("");
+  const [createRacesOpen, setCreateRacesOpen] = useState(false);
+  const [createRacesInput, setCreateRacesInput] = useState("");
+  const [singleMrcOpen, setSingleMrcOpen] = useState(false);
+  const [singleMrcInput, setSingleMrcInput] = useState("");
 
   async function load() {
     setLoading(true);
@@ -60,7 +73,7 @@ export default function MeetingDetailPage() {
       .single();
 
     if (meetingError) {
-      alert(meetingError.message);
+      toast.error(meetingError.message);
       setLoading(false);
       return;
     }
@@ -72,7 +85,7 @@ export default function MeetingDetailPage() {
       .order("race_number", { ascending: true });
 
     if (racesError) {
-      alert(racesError.message);
+      toast.error(racesError.message);
       setLoading(false);
       return;
     }
@@ -82,13 +95,13 @@ export default function MeetingDetailPage() {
     setLoading(false);
   }
 
-  async function createRaces() {
-    const nStr = prompt("How many races? (e.g. 10)");
-    if (!nStr) return;
+  async function createRaces(nStr: string) {
+    setCreateRacesOpen(false);
+    setCreateRacesInput("");
 
     const n = Number(nStr);
     if (!Number.isFinite(n) || n < 1 || n > 30) {
-      alert("Enter a number between 1 and 30.");
+      toast.error("Enter a number between 1 and 30.");
       return;
     }
 
@@ -101,13 +114,13 @@ export default function MeetingDetailPage() {
       }));
 
     if (toInsert.length === 0) {
-      alert("Those races already exist.");
+      toast.error("Those races already exist.");
       return;
     }
 
     const { error } = await supabase.from("races").insert(toInsert);
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
 
@@ -237,19 +250,18 @@ export default function MeetingDetailPage() {
     return { raceNumber, importedCount: importedEntries.length };
   }
 
-  async function updateFromMrc() {
-    const url = prompt("Paste the MRC race link");
-    if (!url) return;
-
+  async function updateFromMrc(url: string) {
+    setSingleMrcOpen(false);
+    setSingleMrcInput("");
     setUpdatingMrc(true);
 
     try {
       const result = await importSingleMrcUrl(url);
       await load();
-      alert(`Imported ${result.importedCount} entries for race ${result.raceNumber}.`);
+      toast.success(`Imported ${result.importedCount} entries for race ${result.raceNumber}.`);
     } catch (error) {
       console.error(error);
-      alert(error instanceof Error ? error.message : "Import failed.");
+      toast.error(error instanceof Error ? error.message : "Import failed.");
     } finally {
       setUpdatingMrc(false);
     }
@@ -262,7 +274,7 @@ export default function MeetingDetailPage() {
       .filter(Boolean);
 
     if (urls.length === 0) {
-      alert("Paste at least one race link.");
+      toast.error("Paste at least one race link.");
       return;
     }
 
@@ -277,10 +289,10 @@ export default function MeetingDetailPage() {
       }
 
       await load();
-      alert(`Bulk import complete.\n\n${results.join("\n")}`);
+      toast.success(`Bulk import complete. ${results.join(", ")}`);
     } catch (error) {
       console.error(error);
-      alert(error instanceof Error ? error.message : "Bulk import failed.");
+      toast.error(error instanceof Error ? error.message : "Bulk import failed.");
     } finally {
       setBulkImporting(false);
     }
@@ -320,7 +332,7 @@ export default function MeetingDetailPage() {
   }, [meeting]);
 
   return (
-    <div className="min-h-screen p-6 bg-muted/30">
+    <div className="min-h-screen p-6 bg-slate-100 dark:bg-slate-900">
       <div className="max-w-5xl mx-auto space-y-6">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -343,20 +355,20 @@ export default function MeetingDetailPage() {
 
             <Button
               variant="outline"
-              onClick={updateFromMrc}
+              onClick={() => setSingleMrcOpen(true)}
               disabled={updatingMrc || bulkImporting}
             >
               {updatingMrc ? "Updating..." : "Update one race"}
             </Button>
 
-            <Button onClick={createRaces}>Create races</Button>
+            <Button onClick={() => setCreateRacesOpen(true)}>Create races</Button>
 
             <Button
-  variant="outline"
-  onClick={() => router.push(`/meetings/${meetingId}/print`)}
->
-  Print page
-</Button>
+              variant="outline"
+              onClick={() => router.push(`/meetings/${meetingId}/print`)}
+            >
+              Print page
+            </Button>
           </div>
         </div>
 
@@ -434,6 +446,54 @@ export default function MeetingDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Create races dialog */}
+      <Dialog open={createRacesOpen} onOpenChange={(o) => { if (!o) { setCreateRacesOpen(false); setCreateRacesInput(""); } }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Create races</DialogTitle>
+            <DialogDescription>How many races? (1–30)</DialogDescription>
+          </DialogHeader>
+          <Input
+            type="number"
+            min={1}
+            max={30}
+            placeholder="e.g. 10"
+            value={createRacesInput}
+            onChange={(e) => setCreateRacesInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") createRaces(createRacesInput); }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCreateRacesOpen(false); setCreateRacesInput(""); }}>Cancel</Button>
+            <Button onClick={() => createRaces(createRacesInput)}>Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single MRC import dialog */}
+      <Dialog open={singleMrcOpen} onOpenChange={(o) => { if (!o) { setSingleMrcOpen(false); setSingleMrcInput(""); } }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Update one race</DialogTitle>
+            <DialogDescription>Paste the MRC race link below.</DialogDescription>
+          </DialogHeader>
+          <Input
+            type="url"
+            placeholder="https://maltaracingclub.com/..."
+            value={singleMrcInput}
+            onChange={(e) => setSingleMrcInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && singleMrcInput.trim()) updateFromMrc(singleMrcInput.trim()); }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSingleMrcOpen(false); setSingleMrcInput(""); }}>Cancel</Button>
+            <Button onClick={() => singleMrcInput.trim() && updateFromMrc(singleMrcInput.trim())} disabled={updatingMrc}>
+              {updatingMrc ? "Importing..." : "Import"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

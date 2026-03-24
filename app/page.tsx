@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 
@@ -65,53 +66,61 @@ export default function LandingPage() {
     }
   }
 
-  return (
-    <main className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+  if (checkingSession) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-900 px-4">
+        <div className="text-sm text-slate-500">Loading...</div>
+      </main>
+    );
+  }
 
-        <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold tracking-tight">MRC System</h1>
-          <p className="text-sm text-slate-500 mt-2">
-            Malta Racing Club breathalyzer testing system
-          </p>
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-100 to-slate-200 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+
+        <div className="mb-8 flex flex-col items-center gap-3 text-center">
+          <Image
+            src="/mrc-logo.jpg"
+            alt="MRC logo"
+            width={64}
+            height={64}
+            className="rounded-2xl shadow-md"
+          />
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              MRC Breath Test System
+            </h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Malta Racing Club
+            </p>
+          </div>
         </div>
 
-        <Card className="shadow-lg border-0 rounded-2xl">
-          <CardHeader>
-            <CardTitle className="text-xl">Log in</CardTitle>
-          </CardHeader>
-
-          <CardContent>
-
-            {checkingSession && (
-              <div className="mb-4 text-sm rounded-xl bg-slate-100 px-3 py-2 text-slate-600">
-                Checking session...
-              </div>
-            )}
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl shadow-slate-200/70 dark:shadow-slate-900/70">
+          <div className="px-8 py-8">
+            <h2 className="mb-6 text-lg font-semibold text-slate-900 dark:text-slate-100">Log in</h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-
-              <div>
-                <label className="text-sm font-medium block mb-1">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   Email
                 </label>
-                <input
+                <Input
                   type="email"
-                  className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-slate-300"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   required
+                  autoFocus
                 />
               </div>
 
-              <div>
-                <label className="text-sm font-medium block mb-1">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   Password
                 </label>
-                <input
+                <Input
                   type="password"
-                  className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-slate-300"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
@@ -120,7 +129,7 @@ export default function LandingPage() {
               </div>
 
               {message && (
-                <div className="text-sm rounded-xl bg-red-100 px-3 py-2 text-red-700">
+                <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
                   {message}
                 </div>
               )}
@@ -132,11 +141,9 @@ export default function LandingPage() {
               >
                 {submitting ? "Logging in..." : "Log in"}
               </Button>
-
             </form>
-
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
       </div>
     </main>

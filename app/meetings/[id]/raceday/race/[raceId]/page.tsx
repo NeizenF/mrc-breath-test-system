@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Trash2 } from "lucide-react";
 
 type Meeting = {
   id: string;
@@ -114,6 +117,10 @@ export default function EditRacePage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [rows, setRows] = useState<EditableRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDirty, setIsDirty] = useState(false);
+  const [pendingNav, setPendingNav] = useState<string | null>(null);
+  const [replaceConfirmEntry, setReplaceConfirmEntry] = useState<EditableRow | null>(null);
+  const [deleteConfirmEntry, setDeleteConfirmEntry] = useState<EditableRow | null>(null);
 
   const buildRows = useCallback(
   (entries: Entry[], allDrivers: Driver[]): EditableRow[] => {
@@ -166,7 +173,7 @@ export default function EditRacePage() {
 
   const loadPage = useCallback(async () => {
     if (!meetingId || !raceId) {
-      alert("Missing meeting ID or race ID.");
+      toast.error("Missing meeting ID or race ID.");
       setLoading(false);
       return;
     }
@@ -180,7 +187,7 @@ export default function EditRacePage() {
       .single();
 
     if (meetingError) {
-      alert(meetingError.message);
+      toast.error(meetingError.message);
       setLoading(false);
       return;
     }
@@ -193,7 +200,7 @@ export default function EditRacePage() {
       .single();
 
     if (raceError) {
-      alert(raceError.message);
+      toast.error(raceError.message);
       setLoading(false);
       return;
     }
@@ -205,7 +212,7 @@ export default function EditRacePage() {
       .order("gate", { ascending: true });
 
     if (entriesError) {
-      alert(entriesError.message);
+      toast.error(entriesError.message);
       setLoading(false);
       return;
     }
@@ -216,7 +223,7 @@ export default function EditRacePage() {
       .order("full_name", { ascending: true });
 
     if (driversError) {
-      alert(driversError.message);
+      toast.error(driversError.message);
       setLoading(false);
       return;
     }
@@ -228,6 +235,7 @@ export default function EditRacePage() {
     setRace(raceData as Race);
     setDrivers(allDrivers);
     setRows(buildRows(entries, allDrivers));
+    setIsDirty(false);
     setLoading(false);
   }, [buildRows, meetingId, raceId]);
 
@@ -294,7 +302,27 @@ export default function EditRacePage() {
     return getRaceColor(race.race_number);
   }, [race]);
 
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const gateA = a.gate.trim() === "" ? Infinity : parseInt(a.gate, 10);
+      const gateB = b.gate.trim() === "" ? Infinity : parseInt(b.gate, 10);
+      return gateA - gateB;
+    });
+  }, [rows]);
+
+  function navigate(href: string) {
+    if (isDirty) {
+      setPendingNav(href);
+    } else {
+      router.push(href);
+    }
+  }
+
+  const INTERNAL_FIELDS = new Set(["show_driver_results", "saving"]);
+
   function updateRow(entryId: string, patch: Partial<EditableRow>) {
+    const isUserEdit = Object.keys(patch).some((k) => !INTERNAL_FIELDS.has(k));
+    if (isUserEdit) setIsDirty(true);
     setRows((currentRows) =>
       currentRows.map((row) =>
         row.entry_id === entryId ? { ...row, ...patch } : row
@@ -313,6 +341,7 @@ export default function EditRacePage() {
   }
 
   function chooseLinkedDriver(entryId: string, driver: Driver) {
+    setIsDirty(true);
     setRows((currentRows) =>
       currentRows.map((row) =>
         row.entry_id === entryId
@@ -329,6 +358,58 @@ export default function EditRacePage() {
     );
   }
 
+  async function replaceDriver(row: EditableRow) {
+    setReplaceConfirmEntry(null);
+
+    const { error: scratchError } = await supabase
+      .from("entries")
+      .update({ scratched: true })
+      .eq("id", row.entry_id);
+
+    if (scratchError) {
+      toast.error(scratchError.message);
+      return;
+    }
+
+    const { data: gateData } = await supabase
+      .from("entries")
+      .select("gate")
+      .eq("race_id", raceId);
+
+    const maxGate = Math.max(
+      0,
+      ...((gateData || []).map((e) => e.gate).filter((g) => g != null) as number[])
+    );
+
+    const { error: insertError } = await supabase.from("entries").insert({
+      race_id: raceId,
+      gate: maxGate + 1,
+      horse_name: row.horse_name.trim() || null,
+      scratched: false,
+      driver_id: null,
+      driver_name_raw: null,
+    });
+
+    if (insertError) {
+      toast.error(insertError.message);
+      return;
+    }
+
+    toast.success("Entry scratched. New blank entry created — set the gate and assign the replacement driver.");
+    await loadPage();
+  }
+
+  async function deleteEntry(row: EditableRow) {
+    setDeleteConfirmEntry(null);
+    const { error } = await supabase.from("entries").delete().eq("id", row.entry_id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Entry removed.");
+    await loadPage();
+  }
+
   async function saveRow(row: EditableRow) {
     updateRow(row.entry_id, { saving: true, show_driver_results: false });
 
@@ -338,7 +419,7 @@ export default function EditRacePage() {
 
     if (trimmedGate !== "" && Number.isNaN(parsedGate)) {
       updateRow(row.entry_id, { saving: false });
-      alert("Gate must be a valid number.");
+      toast.error("Gate must be a valid number.");
       return;
     }
 
@@ -369,7 +450,7 @@ export default function EditRacePage() {
     updateRow(row.entry_id, { saving: false });
 
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
     }
 
@@ -377,18 +458,18 @@ export default function EditRacePage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-6">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-6">
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            onClick={() => router.push(`/meetings/${meetingId}/raceday`)}
+            onClick={() => navigate(`/meetings/${meetingId}/raceday`)}
           >
             Back to RaceDay
           </Button>
           <Button
             variant="outline"
-            onClick={() => router.push(`/meetings/${meetingId}`)}
+            onClick={() => navigate(`/meetings/${meetingId}`)}
           >
             Meeting
           </Button>
@@ -434,7 +515,7 @@ export default function EditRacePage() {
               </p>
             ) : (
               <div className="space-y-4">
-                {rows.map((row, index) => {
+                {sortedRows.map((row, index) => {
                   const searchValue = normalizeSearch(row.driver_search);
 
                   const filteredDrivers =
@@ -721,7 +802,25 @@ export default function EditRacePage() {
                           </div>
                         </div>
 
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => setDeleteConfirmEntry(row)}
+                            disabled={row.saving}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          {!row.scratched && (
+                            <Button
+                              variant="outline"
+                              onClick={() => setReplaceConfirmEntry(row)}
+                              disabled={row.saving}
+                            >
+                              Replace driver
+                            </Button>
+                          )}
                           <Button
                             onClick={() => saveRow(row)}
                             disabled={row.saving}
@@ -738,6 +837,41 @@ export default function EditRacePage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={replaceConfirmEntry !== null}
+        title="Replace driver?"
+        description={`This will scratch the current entry for "${replaceConfirmEntry?.horse_name || "this horse"}" and create a new blank entry for the same gate and horse. The original driver's test result stays attached to the scratched entry and will appear on the print.`}
+        confirmLabel="Replace driver"
+        onConfirm={() => replaceConfirmEntry && replaceDriver(replaceConfirmEntry)}
+        onCancel={() => setReplaceConfirmEntry(null)}
+      />
+
+      <ConfirmDialog
+        open={deleteConfirmEntry !== null}
+        title="Remove entry?"
+        description={`This will permanently delete the entry for "${deleteConfirmEntry?.horse_name || "this horse"}". Any test results attached to this entry will also be deleted.`}
+        confirmLabel="Remove entry"
+        variant="destructive"
+        onConfirm={() => deleteConfirmEntry && deleteEntry(deleteConfirmEntry)}
+        onCancel={() => setDeleteConfirmEntry(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingNav !== null}
+        title="Unsaved changes"
+        description="You have unsaved changes on this page. If you leave now, they will be lost."
+        confirmLabel="Leave anyway"
+        cancelLabel="Stay"
+        variant="destructive"
+        onConfirm={() => {
+          const href = pendingNav!;
+          setPendingNav(null);
+          setIsDirty(false);
+          router.push(href);
+        }}
+        onCancel={() => setPendingNav(null)}
+      />
     </div>
   );
 }

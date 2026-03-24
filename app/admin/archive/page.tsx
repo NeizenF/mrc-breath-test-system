@@ -7,6 +7,10 @@ import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "sonner";
+import { PageHeader } from "@/components/pageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Meeting = {
   id: string;
@@ -35,6 +39,7 @@ export default function ArchivePage() {
   const [loading, setLoading] = useState(true);
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [confirmUnarchiveId, setConfirmUnarchiveId] = useState<string | null>(null);
 
   async function loadArchive() {
     setLoading(true);
@@ -95,13 +100,8 @@ export default function ArchivePage() {
     };
   }, [router]);
 
-  async function handleUnarchive(id: string) {
-    const confirmed = window.confirm(
-      "Unarchive this meeting?\n\nIt will return to Meetings."
-    );
-
-    if (!confirmed) return;
-
+  async function doUnarchive(id: string) {
+    setConfirmUnarchiveId(null);
     setRestoringId(id);
 
     const { error } = await supabase
@@ -111,7 +111,7 @@ export default function ArchivePage() {
 
     if (error) {
       console.error(error);
-      alert("Failed to unarchive meeting.");
+      toast.error("Failed to unarchive meeting.");
     } else {
       setMeetings((prev) => prev.filter((m) => m.id !== id));
     }
@@ -121,31 +121,41 @@ export default function ArchivePage() {
 
   if (checkingAccess) {
     return (
-      <div className="p-4 md:p-6">
-        <div className="text-sm text-muted-foreground">
-          Checking admin access...
+      <div className="p-4 md:p-6 space-y-6">
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-28" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <Skeleton className="h-9 w-36" />
         </div>
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-24 w-full rounded-xl" />
+        ))}
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Archive</h1>
-          <p className="text-sm text-muted-foreground">
-            Archived race meetings
-          </p>
-        </div>
-
-        <Button asChild variant="outline">
-          <Link href="/admin/meetings">Back to Meetings</Link>
-        </Button>
+      <div className="mb-6">
+        <PageHeader
+          title="Archive"
+          subtitle="Archived race meetings."
+          actions={
+            <Button asChild variant="outline">
+              <Link href="/admin/meetings">Back to Meetings</Link>
+            </Button>
+          }
+        />
       </div>
 
       {loading ? (
-        <div className="text-sm text-muted-foreground">Loading archive...</div>
+        <div className="grid gap-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
       ) : meetings.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -175,7 +185,7 @@ export default function ArchivePage() {
                   <Button
                     variant="outline"
                     disabled={restoringId === meeting.id}
-                    onClick={() => handleUnarchive(meeting.id)}
+                    onClick={() => setConfirmUnarchiveId(meeting.id)}
                   >
                     {restoringId === meeting.id ? "Restoring..." : "Unarchive"}
                   </Button>
@@ -189,6 +199,15 @@ export default function ArchivePage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmUnarchiveId !== null}
+        title="Unarchive meeting?"
+        description="This meeting will be removed from the archive and returned to Meetings."
+        confirmLabel="Unarchive"
+        onConfirm={() => confirmUnarchiveId && doUnarchive(confirmUnarchiveId)}
+        onCancel={() => setConfirmUnarchiveId(null)}
+      />
     </div>
   );
 }

@@ -29,12 +29,14 @@ type Entry = {
   driver_id: string | null;
   driver_name_raw: string | null;
   tested?: boolean | null;
+  result?: "negative" | "positive" | null;
 };
 
 type DriverRow = {
   key: string;
   name: string;
   tested: boolean;
+  result: "negative" | "positive" | null;
   raceNumbers: number[];
 };
 
@@ -161,7 +163,7 @@ export default function ArchiveMeetingDetailPage() {
         if (raceIds.length > 0) {
           const { data: entriesData, error: entriesError } = await supabase
             .from("entries")
-            .select("id,race_id,scratched,driver_id,driver_name_raw,tested")
+            .select("id,race_id,scratched,driver_id,driver_name_raw")
             .in("race_id", raceIds);
 
           if (entriesError) {
@@ -175,6 +177,28 @@ export default function ArchiveMeetingDetailPage() {
           }
 
           entries = (entriesData || []) as Entry[];
+
+          const entryIds = entries.map((e) => e.id);
+          if (entryIds.length > 0) {
+            const { data: testsData } = await supabase
+              .from("tests")
+              .select("entry_id,tested,result")
+              .eq("meeting_id", meetingId)
+              .in("entry_id", entryIds);
+
+            const testByEntry = new Map(
+              (testsData || []).map((t) => [t.entry_id, t])
+            );
+
+            entries = entries.map((e) => {
+              const t = testByEntry.get(e.id);
+              return {
+                ...e,
+                tested: !!t?.tested,
+                result: t?.result ?? null,
+              };
+            });
+          }
         }
 
         const raceNumberById = new Map<string, number>();
@@ -195,29 +219,25 @@ export default function ArchiveMeetingDetailPage() {
 
           const existing = driverMap.get(driverKey);
 
+          const entryResult = (entry.result as "negative" | "positive" | null) ?? null;
+
           if (!existing) {
             driverMap.set(driverKey, {
               key: driverKey,
               name: fallbackName,
               tested: !!entry.tested,
+              result: entryResult,
               raceNumbers: typeof raceNumber === "number" ? [raceNumber] : [],
             });
           } else {
-            if (entry.tested) {
-              existing.tested = true;
-            }
+            if (entry.tested) existing.tested = true;
+            if (entryResult === "positive") existing.result = "positive";
+            else if (entryResult === "negative" && existing.result !== "positive") existing.result = "negative";
 
-            if (
-              typeof raceNumber === "number" &&
-              !existing.raceNumbers.includes(raceNumber)
-            ) {
+            if (typeof raceNumber === "number" && !existing.raceNumbers.includes(raceNumber)) {
               existing.raceNumbers.push(raceNumber);
             }
-
-            if (
-              existing.name === "Unknown driver" &&
-              fallbackName !== "Unknown driver"
-            ) {
+            if (existing.name === "Unknown driver" && fallbackName !== "Unknown driver") {
               existing.name = fallbackName;
             }
           }
@@ -250,17 +270,13 @@ export default function ArchiveMeetingDetailPage() {
 
   const summary = useMemo(() => {
     const totalDrivers = drivers.length;
-    const testedDrivers = drivers.filter((driver) => driver.tested).length;
+    const testedDrivers = drivers.filter((d) => d.tested).length;
     const untestedDrivers = totalDrivers - testedDrivers;
-    const completion =
-      totalDrivers > 0 ? Math.round((testedDrivers / totalDrivers) * 100) : 0;
+    const positives = drivers.filter((d) => d.result === "positive").length;
+    const negatives = drivers.filter((d) => d.result === "negative").length;
+    const completion = totalDrivers > 0 ? Math.round((testedDrivers / totalDrivers) * 100) : 0;
 
-    return {
-      totalDrivers,
-      testedDrivers,
-      untestedDrivers,
-      completion,
-    };
+    return { totalDrivers, testedDrivers, untestedDrivers, positives, negatives, completion };
   }, [drivers]);
 
   if (checkingAccess) {
@@ -322,33 +338,30 @@ export default function ArchiveMeetingDetailPage() {
         </Card>
       ) : (
         <div className="space-y-6">
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-xl border p-3">
               <div className="text-xs text-muted-foreground">Drivers</div>
-              <div className="mt-1 text-xl font-semibold">
-                {summary.totalDrivers}
-              </div>
+              <div className="mt-1 text-xl font-semibold">{summary.totalDrivers}</div>
             </div>
-
             <div className="rounded-xl border p-3">
               <div className="text-xs text-muted-foreground">Tested</div>
-              <div className="mt-1 text-xl font-semibold">
-                {summary.testedDrivers}
-              </div>
+              <div className="mt-1 text-xl font-semibold">{summary.testedDrivers}</div>
             </div>
-
             <div className="rounded-xl border p-3">
               <div className="text-xs text-muted-foreground">Untested</div>
-              <div className="mt-1 text-xl font-semibold">
-                {summary.untestedDrivers}
-              </div>
+              <div className="mt-1 text-xl font-semibold">{summary.untestedDrivers}</div>
             </div>
-
+            <div className="rounded-xl border border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950 p-3">
+              <div className="text-xs text-green-600 dark:text-green-400">Negative</div>
+              <div className="mt-1 text-xl font-semibold text-green-700 dark:text-green-300">{summary.negatives}</div>
+            </div>
+            <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 p-3">
+              <div className="text-xs text-red-600 dark:text-red-400">Positive</div>
+              <div className="mt-1 text-xl font-semibold text-red-700 dark:text-red-300">{summary.positives}</div>
+            </div>
             <div className="rounded-xl border p-3">
               <div className="text-xs text-muted-foreground">Completion</div>
-              <div className="mt-1 text-xl font-semibold">
-                {summary.completion}%
-              </div>
+              <div className="mt-1 text-xl font-semibold">{summary.completion}%</div>
             </div>
           </div>
 
@@ -378,15 +391,23 @@ export default function ArchiveMeetingDetailPage() {
                         </div>
                       </div>
 
-                      <div
-                        className={[
-                          "inline-flex w-fit rounded-full px-3 py-1 text-xs font-medium",
-                          driver.tested
-                            ? "bg-green-100 text-green-700"
-                            : "bg-amber-100 text-amber-700",
-                        ].join(" ")}
-                      >
-                        {driver.tested ? "Tested" : "Not tested"}
+                      <div className={[
+                        "inline-flex w-fit rounded-full px-3 py-1 text-xs font-medium",
+                        driver.result === "positive"
+                          ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                          : driver.result === "negative"
+                          ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
+                          : driver.tested
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                          : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+                      ].join(" ")}>
+                        {driver.result === "positive"
+                          ? "Positive"
+                          : driver.result === "negative"
+                          ? "Negative"
+                          : driver.tested
+                          ? "Tested"
+                          : "Not tested"}
                       </div>
                     </div>
                   ))}

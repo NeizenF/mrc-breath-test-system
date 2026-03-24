@@ -78,14 +78,14 @@ export default function AdminLoginPage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-900 px-4">
         <div className="text-sm text-slate-500">Loading...</div>
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-900 px-4">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="mb-6 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">

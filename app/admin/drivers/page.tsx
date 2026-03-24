@@ -3,11 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { normalizeName } from "@/lib/normalizeName";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Trash2, ExternalLink } from "lucide-react";
+import { PageHeader } from "@/components/pageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Driver = {
   id: string;
@@ -33,6 +38,7 @@ export default function DriversPage() {
 
   const [selectedFileName, setSelectedFileName] = useState("");
   const [importing, setImporting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function loadDrivers() {
     setLoading(true);
@@ -43,7 +49,7 @@ export default function DriversPage() {
       .order("full_name", { ascending: true });
 
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       setLoading(false);
       return;
     }
@@ -54,7 +60,7 @@ export default function DriversPage() {
 
   async function addDriver() {
     if (!newName.trim()) {
-      alert("Please enter the driver's full name.");
+      toast.error("Please enter the driver's full name.");
       return;
     }
 
@@ -62,18 +68,47 @@ export default function DriversPage() {
 
     const cleanName = newName.trim();
 
-    const { error } = await supabase.from("drivers").insert({
-      full_name: cleanName,
-      normalized_name: normalizeName(cleanName),
-      id_card: newIdCard.trim() || null,
-      phone: newPhone.trim() || null,
-    });
+    const { data: inserted, error } = await supabase
+      .from("drivers")
+      .insert({
+        full_name: cleanName,
+        normalized_name: normalizeName(cleanName),
+        id_card: newIdCard.trim() || null,
+        phone: newPhone.trim() || null,
+      })
+      .select("id")
+      .single();
 
     setSaving(false);
 
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
       return;
+    }
+
+    // Auto-link any entries that used this driver's name as a raw name
+    if (inserted?.id) {
+      const normalized = normalizeName(cleanName);
+      const { data: rawEntries } = await supabase
+        .from("entries")
+        .select("id,driver_name_raw")
+        .is("driver_id", null)
+        .not("driver_name_raw", "is", null);
+
+      const matches = (rawEntries || []).filter(
+        (e) => normalizeName(e.driver_name_raw || "") === normalized
+      );
+
+      if (matches.length > 0) {
+        await supabase
+          .from("entries")
+          .update({ driver_id: inserted.id, driver_name_raw: null })
+          .in("id", matches.map((e) => e.id));
+
+        toast.success(`Driver added and auto-linked to ${matches.length} existing entr${matches.length === 1 ? "y" : "ies"}.`);
+      } else {
+        toast.success("Driver added.");
+      }
     }
 
     setNewName("");
@@ -100,7 +135,20 @@ export default function DriversPage() {
     const { error } = await supabase.from("drivers").update(payload).eq("id", id);
 
     if (error) {
-      alert(error.message);
+      toast.error(error.message);
+    } else {
+      toast.success("Saved");
+    }
+  }
+
+  async function deleteDriver(id: string) {
+    setConfirmDeleteId(null);
+    const { error } = await supabase.from("drivers").delete().eq("id", id);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      setDrivers((prev) => prev.filter((d) => d.id !== id));
+      toast.success("Driver deleted");
     }
   }
 
@@ -135,7 +183,7 @@ export default function DriversPage() {
         if (!error) imported++;
       }
 
-      alert(`Imported ${imported} drivers.`);
+      toast.success(`Imported ${imported} drivers.`);
       await loadDrivers();
     } finally {
       setImporting(false);
@@ -197,36 +245,46 @@ export default function DriversPage() {
 
   if (checkingAccess) {
     return (
-      <div className="min-h-screen bg-muted/30 p-6">
-        <div className="mx-auto max-w-6xl">
-          <p className="text-sm text-muted-foreground">
-            Checking admin access...
-          </p>
+      <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="flex items-start justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-7 w-36" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-20" />
+            </div>
+          </div>
+          <Skeleton className="h-48 w-full rounded-xl" />
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-xl" />
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-6">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-6">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">DriverInfo</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage drivers, contact details, and imports.
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => router.push("/dashboard")}>
-              Dashboard
-            </Button>
-            <Button variant="outline" onClick={() => router.push("/admin")}>
-              Admin
-            </Button>
-          </div>
-        </div>
+        <PageHeader
+          title="DriverInfo"
+          subtitle="Manage drivers, contact details, and imports."
+          actions={
+            <>
+              <Button variant="outline" onClick={() => router.push("/dashboard")}>
+                Dashboard
+              </Button>
+              <Button variant="outline" onClick={() => router.push("/admin")}>
+                Admin
+              </Button>
+            </>
+          }
+        />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="shadow-sm">
@@ -314,7 +372,11 @@ export default function DriversPage() {
             />
 
             {loading && (
-              <p className="text-sm text-muted-foreground">Loading drivers...</p>
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-xl" />
+                ))}
+              </div>
             )}
 
             {!loading && filteredDrivers.length === 0 && (
@@ -326,7 +388,7 @@ export default function DriversPage() {
                 {filteredDrivers.map((driver) => (
                   <div
                     key={driver.id}
-                    className="grid gap-3 rounded-xl border bg-background p-4 md:grid-cols-3"
+                    className="grid gap-3 rounded-xl border bg-background p-4 md:grid-cols-[1fr_1fr_1fr_auto_auto]"
                   >
                     <Input
                       defaultValue={driver.full_name}
@@ -348,6 +410,22 @@ export default function DriversPage() {
                         updateDriver(driver.id, "phone", e.target.value)
                       }
                     />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => router.push(`/admin/drivers/${driver.id}`)}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => setConfirmDeleteId(driver.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -355,6 +433,16 @@ export default function DriversPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Delete driver?"
+        description="This will permanently remove the driver from the database."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => confirmDeleteId && deleteDriver(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }
