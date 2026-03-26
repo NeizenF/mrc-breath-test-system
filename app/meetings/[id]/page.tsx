@@ -230,17 +230,28 @@ export default function MeetingDetailPage() {
         matchedDriverId = matchedDriver?.id ?? null;
       }
 
-      const { error } = await supabase.from("entries").upsert(
-        {
-          race_id: raceId,
-          gate: item.gate,
-          horse_name: item.horse_name,
-          driver_name_raw: item.driver_name_raw,
-          driver_id: item.scratched ? null : matchedDriverId,
-          scratched: item.scratched,
-        },
-        { onConflict: "race_id,gate" }
-      );
+      // Check if a non-scratched entry already exists for this gate
+      // (can't use upsert with onConflict because the unique index is partial)
+      const { data: existing } = await supabase
+        .from("entries")
+        .select("id")
+        .eq("race_id", raceId)
+        .eq("gate", item.gate)
+        .eq("scratched", false)
+        .maybeSingle();
+
+      const payload = {
+        race_id: raceId,
+        gate: item.gate,
+        horse_name: item.horse_name,
+        driver_name_raw: item.driver_name_raw,
+        driver_id: item.scratched ? null : matchedDriverId,
+        scratched: item.scratched,
+      };
+
+      const { error } = existing
+        ? await supabase.from("entries").update(payload).eq("id", existing.id)
+        : await supabase.from("entries").insert(payload);
 
       if (error) {
         throw new Error(error.message);
