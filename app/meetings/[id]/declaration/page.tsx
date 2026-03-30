@@ -335,7 +335,7 @@ export default function MeetingDeclarationPage() {
             </div>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/UET.png" alt="UET Logo" className="h-16 object-contain" />
+          <img src="/UET.png" alt="UET Logo" className="h-24 object-contain" />
         </div>
 
         <div className="mb-8 space-y-2 text-[14px] leading-relaxed">
