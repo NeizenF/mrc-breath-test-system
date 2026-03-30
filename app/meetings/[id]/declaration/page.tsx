@@ -325,13 +325,17 @@ export default function MeetingDeclarationPage() {
 
       {/* Printable letter */}
       <div className="mx-auto max-w-[900px] px-8 py-10">
-        <div className="mb-10 flex items-start gap-4 border-b-2 border-slate-300 pb-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/mrc-logo.jpg" alt="MRC Logo" className="h-16 w-16 object-contain" />
-          <div className="flex-1">
-            <div className="text-[20px] font-bold uppercase tracking-wide text-slate-800">Malta Racing Club</div>
-            <div className="mt-1 text-[15px] font-semibold text-slate-700">Official Breathalyzer Declaration</div>
+        <div className="mb-10 flex items-center justify-between border-b-2 border-slate-300 pb-6">
+          <div className="flex items-center gap-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/mrc-logo.jpg" alt="MRC Logo" className="h-16 w-16 object-contain" />
+            <div>
+              <div className="text-[20px] font-bold uppercase tracking-wide text-slate-800">Malta Racing Club</div>
+              <div className="mt-1 text-[15px] font-semibold text-slate-700">Official Breathalyzer Declaration</div>
+            </div>
           </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/UET.png" alt="UET Logo" className="h-16 object-contain" />
         </div>
 
         <div className="mb-8 space-y-2 text-[14px] leading-relaxed">
