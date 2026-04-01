@@ -113,6 +113,15 @@ function isSpecial(val: string) {
   return val.trim().toUpperCase() !== "NORMAL";
 }
 
+function stageBadgeClass(value: string) {
+  const v = value.trim().toUpperCase();
+  if (v.endsWith(" F") || v.endsWith(" FINAL"))   return "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300";
+  if (v.endsWith(" SF"))                           return "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300";
+  if (v.endsWith(" H"))                            return "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300";
+  if (v.endsWith(" Q"))                            return "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300";
+  return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+}
+
 const CLASS_LABELS = ["PREMIER", "GOLD", "SILVER", "BRONZE", "COPPER"] as const;
 const CLASS_KEYS = ["premier", "gold", "silver", "bronze", "copper"] as const;
 
@@ -127,7 +136,7 @@ export default function AdminCalendarPage() {
   const [form, setForm] = useState<EditForm>(BLANK_FORM);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [showUpcomingOnly, setShowUpcomingOnly] = useState(true);
+  const [showUpcomingOnly, setShowUpcomingOnly] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -317,8 +326,8 @@ export default function AdminCalendarPage() {
                           ) : (
                             <div className="flex flex-wrap gap-1">
                               {specials.map(s => (
-                                <span key={s!.label} className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
-                                  <span className="text-blue-400 dark:text-blue-500">{s!.label}:</span> {s!.value}
+                                <span key={s!.label} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${stageBadgeClass(s!.value)}`}>
+                                  <span className="opacity-60">{s!.label}:</span> {s!.value}
                                 </span>
                               ))}
                             </div>
