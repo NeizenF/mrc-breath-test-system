@@ -314,28 +314,28 @@ export default function AdminCalendarPage() {
                       <tr
                         key={entry.id}
                         className={[
-                          "border-b transition-colors",
-                          isPast ? "opacity-40" : "",
+                          "border-b text-sm transition-colors",
+                          isPast ? "opacity-50" : "",
                           idx % 2 === 0 ? "" : "bg-slate-50/50 dark:bg-slate-800/30",
                         ].join(" ")}
                       >
-                        <td className="px-3 py-2 font-medium text-muted-foreground">{entry.meeting_number}</td>
-                        <td className="px-3 py-2 whitespace-nowrap font-medium">{formatDate(entry.meeting_date)}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{dayOfWeek(entry.meeting_date)}</td>
+                        <td className="px-3 py-2.5 font-semibold text-slate-500 dark:text-slate-400">{entry.meeting_number}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap font-semibold text-slate-800 dark:text-slate-100">{formatDate(entry.meeting_date)}</td>
+                        <td className="px-3 py-2.5 font-medium text-slate-500 dark:text-slate-400">{dayOfWeek(entry.meeting_date)}</td>
                         {CLASS_KEYS.map(key => (
-                          <td key={key} className="px-3 py-2 whitespace-nowrap">
+                          <td key={key} className="px-3 py-2.5 whitespace-nowrap">
                             {isSpecial(entry[key]) ? (
                               <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${stageBadgeClass(entry[key])}`}>
                                 {entry[key]}
                               </span>
                             ) : (
-                              <span className="text-slate-400 dark:text-slate-500 text-xs">Normal</span>
+                              <span className="text-slate-400 dark:text-slate-500 text-xs font-medium">Normal</span>
                             )}
                           </td>
                         ))}
-                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{entry.dist_for_normal ?? "—"}</td>
-                        <td className="px-3 py-2">{workBadge(entry.work_status)}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{entry.notes || ""}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap font-medium text-slate-600 dark:text-slate-300">{entry.dist_for_normal ?? "—"}</td>
+                        <td className="px-3 py-2.5">{workBadge(entry.work_status)}</td>
+                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">{entry.notes || ""}</td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button
