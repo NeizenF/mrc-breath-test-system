@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 type Meeting = {
@@ -611,6 +612,12 @@ export default function RaceDayPage() {
     });
   }, [races, rowsByRace]);
 
+  const overallProgress = useMemo(() => {
+    const total = raceProgress.reduce((s, r) => s + r.totalCount, 0);
+    const completed = raceProgress.reduce((s, r) => s + r.completedCount, 0);
+    return { total, completed };
+  }, [raceProgress]);
+
   function handleMeetingChange(nextMeetingId: string) {
     if (!nextMeetingId || nextMeetingId === meetingId) return;
     router.push(`/meetings/${nextMeetingId}/raceday`);
@@ -713,6 +720,28 @@ export default function RaceDayPage() {
           </CardContent>
         </Card>
 
+        {!loading && overallProgress.total > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Meeting progress</span>
+              <span className="text-muted-foreground">
+                {overallProgress.completed}/{overallProgress.total} tested
+                {overallProgress.completed === overallProgress.total && " ✓"}
+              </span>
+            </div>
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div
+                className={`h-2.5 rounded-full transition-all duration-500 ${
+                  overallProgress.completed === overallProgress.total
+                    ? "bg-green-500"
+                    : "bg-blue-500"
+                }`}
+                style={{ width: `${(overallProgress.completed / overallProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {!loading && races.length > 0 && (
           <div className="space-y-2 text-sm">
             <p className="text-sm font-medium text-muted-foreground">Race progress</p>
@@ -750,11 +779,25 @@ export default function RaceDayPage() {
         )}
 
         {loading && (
-          <Card>
-            <CardContent className="py-6">
-              <p className="text-sm text-muted-foreground">Loading entries…</p>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            {[1, 2, 3].map((i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-4">
+                    <Skeleton className="h-12 w-32 rounded-xl" />
+                    <Skeleton className="h-20 w-40 rounded-xl" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4].map((j) => (
+                      <Skeleton key={j} className="h-12 w-full rounded-lg" />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
 
         {!loading && races.length === 0 && (
@@ -882,7 +925,22 @@ export default function RaceDayPage() {
                                     : ""
                                 }`}
                               >
-                                <td className="px-3 py-3">{row.gate ?? "—"}</td>
+                                <td className="px-3 py-3">
+                                  {row.gate !== null ? (
+                                    <span
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded font-bold text-xs"
+                                      style={{
+                                        backgroundColor: raceColor.bg,
+                                        color: raceColor.text,
+                                        border: `1px solid ${raceColor.border}`,
+                                      }}
+                                    >
+                                      {row.gate}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </td>
                                 <td className="px-3 py-3 font-medium">
                                   {row.scratched
                                     ? `SCRATCHED${row.horse_name ? ` — ${row.horse_name}` : ""}`

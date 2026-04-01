@@ -24,6 +24,28 @@ function formatDate(dateStr: string | null) {
   });
 }
 
+function getMeetingStatus(dateStr: string | null): "today" | "upcoming" | "past" {
+  if (!dateStr) return "past";
+  const today = new Date().toISOString().split("T")[0];
+  if (dateStr === today) return "today";
+  if (dateStr > today) return "upcoming";
+  return "past";
+}
+
+function getDaysLabel(dateStr: string | null): string | null {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  const diff = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  if (diff > 0) return `In ${diff} days`;
+  return `${Math.abs(diff)} days ago`;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
@@ -44,16 +66,33 @@ export default function DashboardPage() {
 
         setEmail(session.user.email ?? null);
 
-        const { data } = await supabase
+        const todayStr = new Date().toISOString().split("T")[0];
+
+        // Prefer the next upcoming (or today's) meeting; fall back to most recent past
+        const { data: upcoming } = await supabase
           .from("meetings")
           .select("id,title,meeting_date")
           .eq("is_archived", false)
-          .order("meeting_date", { ascending: false })
-          .order("created_at", { ascending: false })
+          .gte("meeting_date", todayStr)
+          .order("meeting_date", { ascending: true })
           .limit(1)
           .maybeSingle();
 
-        if (mounted) setActiveMeeting(data ?? null);
+        if (!mounted) return;
+
+        if (upcoming) {
+          setActiveMeeting(upcoming);
+        } else {
+          const { data: recent } = await supabase
+            .from("meetings")
+            .select("id,title,meeting_date")
+            .eq("is_archived", false)
+            .order("meeting_date", { ascending: false, nullsFirst: false })
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (mounted) setActiveMeeting(recent ?? null);
+        }
       } catch (error) {
         console.error("Failed to load dashboard:", error);
         router.replace("/");
@@ -138,17 +177,40 @@ export default function DashboardPage() {
                   ) : activeMeeting ? (
                     <div className="flex items-start gap-3">
                       <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                          Active meeting
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                            {getMeetingStatus(activeMeeting.meeting_date) === "today"
+                              ? "Today's meeting"
+                              : getMeetingStatus(activeMeeting.meeting_date) === "upcoming"
+                              ? "Next meeting"
+                              : "Most recent meeting"}
+                          </p>
+                          {getMeetingStatus(activeMeeting.meeting_date) === "today" && (
+                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-700 dark:bg-green-950 dark:text-green-400">
+                              Today
+                            </span>
+                          )}
+                          {getMeetingStatus(activeMeeting.meeting_date) === "upcoming" && (
+                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-950 dark:text-blue-400">
+                              Upcoming
+                            </span>
+                          )}
+                        </div>
                         <p className="mt-0.5 font-medium text-slate-800 dark:text-slate-200">
                           {activeMeeting.title || "Untitled meeting"}
                         </p>
                         {activeMeeting.meeting_date && (
-                          <p className="text-sm text-slate-500 dark:text-slate-400">
-                            {formatDate(activeMeeting.meeting_date)}
-                          </p>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              {formatDate(activeMeeting.meeting_date)}
+                            </p>
+                            {getDaysLabel(activeMeeting.meeting_date) && getMeetingStatus(activeMeeting.meeting_date) !== "today" && (
+                              <p className="text-xs font-medium text-slate-400 dark:text-slate-500">
+                                · {getDaysLabel(activeMeeting.meeting_date)}
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
