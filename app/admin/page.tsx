@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
-import { CalendarDays, Users, ArchiveIcon, ChevronRight } from "lucide-react";
+import { CalendarDays, Users, ArchiveIcon, ChevronRight, CalendarRange } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const CARDS = [
@@ -25,6 +25,12 @@ const CARDS = [
     icon: ArchiveIcon,
     title: "Archive",
     description: "View archived meetings and restore them when needed.",
+  },
+  {
+    href: "/admin/calendar",
+    icon: CalendarRange,
+    title: "Race Calendar",
+    description: "View and manage the 2026 race schedule.",
   },
 ];
 
