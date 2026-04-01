@@ -951,9 +951,22 @@ export default function RaceDayPage() {
                                   )}
                                 </td>
                                 <td className="px-3 py-3 font-medium">
-                                  {row.scratched
-                                    ? `SCRATCHED${row.horse_name ? ` — ${row.horse_name}` : ""}`
-                                    : row.horse_name || "Unnamed horse"}
+                                  {row.scratched ? (
+                                    <span className="text-slate-400 line-through">
+                                      {row.horse_name || "Unnamed horse"}
+                                    </span>
+                                  ) : row.horse_name ? (
+                                    <a
+                                      href={`https://www.google.com/search?q=site:maltaracingclub.com+"${encodeURIComponent(row.horse_name)}"`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="hover:underline hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                    >
+                                      {row.horse_name}
+                                    </a>
+                                  ) : (
+                                    "Unnamed horse"
+                                  )}
                                 </td>
                                 <td className="px-3 py-3">
                                   {row.driver_name || "—"}
