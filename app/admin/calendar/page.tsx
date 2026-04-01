@@ -90,10 +90,10 @@ const SEED_DATA: EditForm[] = [
 
 function workBadge(status: string | null) {
   const s = (status || "").trim().toUpperCase();
-  if (s === "WORK")     return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900 dark:text-green-300">WORK</span>;
-  if (s === "NO WORK")  return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900 dark:text-red-300">NO WORK</span>;
-  if (s === "TBA")      return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300">TBA</span>;
-  if (s === "SR")       return <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300">SR</span>;
+  if (s === "WORK")     return <span className="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900 dark:text-green-300">WORK</span>;
+  if (s === "NO WORK")  return <span className="whitespace-nowrap rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900 dark:text-red-300">NO WORK</span>;
+  if (s === "TBA")      return <span className="whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900 dark:text-amber-300">TBA</span>;
+  if (s === "SR")       return <span className="whitespace-nowrap rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900 dark:text-blue-300">SR</span>;
   return null;
 }
 
@@ -329,7 +329,7 @@ export default function AdminCalendarPage() {
                                 {entry[key]}
                               </span>
                             ) : (
-                              <span className="text-muted-foreground text-xs">Normal</span>
+                              <span className="text-muted-foreground text-xs">—</span>
                             )}
                           </td>
                         ))}
