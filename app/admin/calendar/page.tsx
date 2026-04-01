@@ -289,13 +289,18 @@ export default function AdminCalendarPage() {
                 : "No upcoming meetings."}
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-slate-50 dark:bg-slate-800 text-xs text-muted-foreground uppercase tracking-wide">
-                  <th className="px-3 py-3 text-left w-8">#</th>
+                  <th className="px-3 py-3 text-left">#</th>
                   <th className="px-3 py-3 text-left">Date</th>
                   <th className="px-3 py-3 text-left">Day</th>
-                  <th className="px-3 py-3 text-left">Special races</th>
+                  <th className="px-3 py-3 text-left">Premier</th>
+                  <th className="px-3 py-3 text-left">Gold</th>
+                  <th className="px-3 py-3 text-left">Silver</th>
+                  <th className="px-3 py-3 text-left">Bronze</th>
+                  <th className="px-3 py-3 text-left">Copper</th>
                   <th className="px-3 py-3 text-left">Dist</th>
                   <th className="px-3 py-3 text-left">Work</th>
                   <th className="px-3 py-3 text-left">Notes</th>
@@ -305,34 +310,29 @@ export default function AdminCalendarPage() {
               <tbody>
                   {displayed.map((entry, idx) => {
                     const isPast = entry.meeting_date < today;
-                    const specials = CLASS_KEYS
-                      .map((key, i) => isSpecial(entry[key]) ? { label: CLASS_LABELS[i], value: entry[key] } : null)
-                      .filter(Boolean) as { label: string; value: string }[];
                     return (
                       <tr
                         key={entry.id}
                         className={[
                           "border-b transition-colors",
-                          isPast ? "opacity-50" : "",
+                          isPast ? "opacity-40" : "",
                           idx % 2 === 0 ? "" : "bg-slate-50/50 dark:bg-slate-800/30",
                         ].join(" ")}
                       >
                         <td className="px-3 py-2 font-medium text-muted-foreground">{entry.meeting_number}</td>
                         <td className="px-3 py-2 whitespace-nowrap font-medium">{formatDate(entry.meeting_date)}</td>
                         <td className="px-3 py-2 text-muted-foreground">{dayOfWeek(entry.meeting_date)}</td>
-                        <td className="px-3 py-2">
-                          {specials.length === 0 ? (
-                            <span className="text-muted-foreground text-xs">All normal</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {specials.map(s => (
-                                <span key={s!.label} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${stageBadgeClass(s!.value)}`}>
-                                  <span className="opacity-60">{s!.label}:</span> {s!.value}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </td>
+                        {CLASS_KEYS.map(key => (
+                          <td key={key} className="px-3 py-2 whitespace-nowrap">
+                            {isSpecial(entry[key]) ? (
+                              <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${stageBadgeClass(entry[key])}`}>
+                                {entry[key]}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">Normal</span>
+                            )}
+                          </td>
+                        ))}
                         <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{entry.dist_for_normal ?? "—"}</td>
                         <td className="px-3 py-2">{workBadge(entry.work_status)}</td>
                         <td className="px-3 py-2 text-muted-foreground">{entry.notes || ""}</td>
@@ -364,6 +364,7 @@ export default function AdminCalendarPage() {
                   })}
                 </tbody>
               </table>
+            </div>
           )}
         </CardContent>
       </Card>
