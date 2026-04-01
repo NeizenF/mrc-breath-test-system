@@ -1,4 +1,24 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+// Simple in-memory rate limiter (resets on cold start)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 60_000;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
+const ALLOWED_HOSTNAMES = ["maltaracingclub.com", "www.maltaracingclub.com"];
 
 type ParsedEntry = {
   gate: number;
@@ -186,11 +206,56 @@ function parseRaceClass(text: string): string | null {
 
 export async function POST(req: Request) {
   try {
+    // Rate limiting
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      req.headers.get("x-real-ip") ??
+      "unknown";
+
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait a moment." },
+        { status: 429 }
+      );
+    }
+
+    // Auth check — client must send Authorization: Bearer <access_token>
+    const authHeader = req.headers.get("Authorization");
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
     const body = await req.json();
     const { url } = body as { url?: string };
 
     if (!url) {
       return NextResponse.json({ error: "Missing URL." }, { status: 400 });
+    }
+
+    // Validate that URL is from the MRC domain
+    try {
+      const parsed = new URL(url);
+      if (!ALLOWED_HOSTNAMES.includes(parsed.hostname)) {
+        return NextResponse.json(
+          { error: "Only Malta Racing Club URLs are accepted." },
+          { status: 400 }
+        );
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid URL." }, { status: 400 });
     }
 
     const response = await fetch(url, {

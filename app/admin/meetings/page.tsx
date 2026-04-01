@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/pageHeader";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type Meeting = {
@@ -214,7 +215,10 @@ export default function MeetingsPage() {
 
   return (
     <div className="p-4 md:p-6">
-      <div className="mb-6">
+      <div className="mb-2">
+        <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Meetings" }]} />
+      </div>
+      <div className="mb-6 mt-4">
         <PageHeader
           title="Meetings"
           subtitle="Manage your active race meetings."

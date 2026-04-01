@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { toast } from "sonner";
 
 type Meeting = {
@@ -626,6 +627,12 @@ export default function RaceDayPage() {
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
+        <Breadcrumbs items={[
+          { label: "Meetings", href: "/admin/meetings" },
+          { label: heading, href: `/meetings/${meetingId}` },
+          { label: "RaceDay" },
+        ]} />
+
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -826,7 +833,7 @@ export default function RaceDayPage() {
             const raceColor = getRaceColor(race.race_number);
 
             return (
-              <Card key={race.id} id={`race-${race.race_number}`}>
+              <Card key={race.id} id={`race-${race.race_number}`} className="animate-in fade-in duration-300">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-3">
@@ -886,9 +893,11 @@ export default function RaceDayPage() {
 
                 <CardContent>
                   {raceRows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No entries yet for this race.
-                    </p>
+                    <div className="flex flex-col items-center gap-2 py-8 text-center">
+                      <span className="text-3xl">🏇</span>
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No entries yet</p>
+                      <p className="text-xs text-muted-foreground">Import from MRC or add entries manually.</p>
+                    </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse text-sm">

@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDateLong } from "@/lib/formatters";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 type Meeting = {
   id: string;
@@ -67,7 +69,12 @@ export default function MeetingDeclarationPage() {
     (async () => {
       const { data: authData } = await supabase.auth.getUser();
       if (!authData.user) {
-        router.replace("/login");
+        router.replace("/");
+        return;
+      }
+      const admin = await isCurrentUserAdmin();
+      if (!admin) {
+        router.replace("/dashboard");
         return;
       }
       await loadDeclarationData();
@@ -250,6 +257,11 @@ export default function MeetingDeclarationPage() {
 
       {/* Toolbar */}
       <div className="no-print border-b px-6 py-4">
+        <Breadcrumbs items={[
+          { label: "Meetings", href: "/admin/meetings" },
+          { label: meetingTitle, href: `/meetings/${meetingId}` },
+          { label: "Declaration" },
+        ]} />
         <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg font-semibold">Declaration Letter</h1>

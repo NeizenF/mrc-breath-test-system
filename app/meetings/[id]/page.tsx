@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDateLong } from "@/lib/formatters";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import {
   Dialog,
   DialogContent,
@@ -128,10 +129,15 @@ export default function MeetingDetailPage() {
   }
 
   async function importSingleMrcUrl(url: string) {
+    const { data: { session } } = await supabase.auth.getSession();
+
     const res = await fetch("/api/mrc-import", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {}),
       },
       body: JSON.stringify({ url }),
     });
@@ -345,6 +351,11 @@ export default function MeetingDetailPage() {
   return (
     <div className="min-h-screen p-6 bg-slate-100 dark:bg-slate-900">
       <div className="max-w-5xl mx-auto space-y-6">
+        <Breadcrumbs items={[
+          { label: "Meetings", href: "/admin/meetings" },
+          { label: title },
+        ]} />
+
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">{title}</h1>
