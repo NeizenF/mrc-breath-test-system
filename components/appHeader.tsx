@@ -69,6 +69,7 @@ export default function AppHeader() {
         {loggedIn && (
           <nav className="flex items-center gap-5">
             {navLink("/dashboard", "Dashboard")}
+            {isAdmin && navLink("/admin/calendar", "Calendar")}
             {isAdmin && navLink("/admin", "Admin")}
           </nav>
         )}

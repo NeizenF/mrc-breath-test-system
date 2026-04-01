@@ -234,7 +234,7 @@ export default function AdminCalendarPage() {
 
   if (checkingAccess) {
     return (
-      <div className="mx-auto max-w-6xl p-6">
+      <div className="p-6">
         <Skeleton className="h-8 w-48 mb-4" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </div>
@@ -242,7 +242,7 @@ export default function AdminCalendarPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-4 md:p-6">
+    <div className="w-full p-4 md:p-6">
       {/* Header */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -280,27 +280,25 @@ export default function AdminCalendarPage() {
                 : "No upcoming meetings."}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-slate-50 dark:bg-slate-800 text-xs text-muted-foreground uppercase tracking-wide">
-                    <th className="px-3 py-3 text-left w-8">#</th>
-                    <th className="px-3 py-3 text-left">Date</th>
-                    <th className="px-3 py-3 text-left">Day</th>
-                    <th className="px-3 py-3 text-left">Premier</th>
-                    <th className="px-3 py-3 text-left">Gold</th>
-                    <th className="px-3 py-3 text-left">Silver</th>
-                    <th className="px-3 py-3 text-left">Bronze</th>
-                    <th className="px-3 py-3 text-left">Copper</th>
-                    <th className="px-3 py-3 text-left">Dist</th>
-                    <th className="px-3 py-3 text-left">Work</th>
-                    <th className="px-3 py-3 text-left">Notes</th>
-                    <th className="px-3 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-slate-50 dark:bg-slate-800 text-xs text-muted-foreground uppercase tracking-wide">
+                  <th className="px-3 py-3 text-left w-8">#</th>
+                  <th className="px-3 py-3 text-left">Date</th>
+                  <th className="px-3 py-3 text-left">Day</th>
+                  <th className="px-3 py-3 text-left">Special races</th>
+                  <th className="px-3 py-3 text-left">Dist</th>
+                  <th className="px-3 py-3 text-left">Work</th>
+                  <th className="px-3 py-3 text-left">Notes</th>
+                  <th className="px-3 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
                   {displayed.map((entry, idx) => {
                     const isPast = entry.meeting_date < today;
+                    const specials = CLASS_KEYS
+                      .map((key, i) => isSpecial(entry[key]) ? { label: CLASS_LABELS[i], value: entry[key] } : null)
+                      .filter(Boolean) as { label: string; value: string }[];
                     return (
                       <tr
                         key={entry.id}
@@ -313,14 +311,22 @@ export default function AdminCalendarPage() {
                         <td className="px-3 py-2 font-medium text-muted-foreground">{entry.meeting_number}</td>
                         <td className="px-3 py-2 whitespace-nowrap font-medium">{formatDate(entry.meeting_date)}</td>
                         <td className="px-3 py-2 text-muted-foreground">{dayOfWeek(entry.meeting_date)}</td>
-                        {CLASS_KEYS.map(key => (
-                          <td key={key} className={`px-3 py-2 whitespace-nowrap ${isSpecial(entry[key]) ? "font-semibold text-blue-700 dark:text-blue-400" : "text-muted-foreground"}`}>
-                            {entry[key]}
-                          </td>
-                        ))}
-                        <td className="px-3 py-2 text-muted-foreground">{entry.dist_for_normal ?? "—"}</td>
+                        <td className="px-3 py-2">
+                          {specials.length === 0 ? (
+                            <span className="text-muted-foreground text-xs">All normal</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {specials.map(s => (
+                                <span key={s!.label} className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
+                                  <span className="text-blue-400 dark:text-blue-500">{s!.label}:</span> {s!.value}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{entry.dist_for_normal ?? "—"}</td>
                         <td className="px-3 py-2">{workBadge(entry.work_status)}</td>
-                        <td className="px-3 py-2 text-muted-foreground max-w-[160px] truncate">{entry.notes || ""}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{entry.notes || ""}</td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button
@@ -349,7 +355,6 @@ export default function AdminCalendarPage() {
                   })}
                 </tbody>
               </table>
-            </div>
           )}
         </CardContent>
       </Card>
