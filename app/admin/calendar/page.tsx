@@ -329,7 +329,7 @@ export default function AdminCalendarPage() {
                                 {entry[key]}
                               </span>
                             ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
+                              <span className="text-slate-400 dark:text-slate-500 text-xs">Normal</span>
                             )}
                           </td>
                         ))}
