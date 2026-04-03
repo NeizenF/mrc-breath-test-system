@@ -1027,8 +1027,8 @@ export default function RaceDayPage() {
             return (
               <Card key={race.id} id={`race-${race.race_number}`} className="animate-in fade-in duration-300">
                 <CardHeader>
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-3">
                       <div
                         className="inline-flex rounded-xl border px-5 py-2"
                         style={{
@@ -1042,48 +1042,54 @@ export default function RaceDayPage() {
                         </span>
                       </div>
 
-                      <div className="min-w-[150px] space-y-2 text-right">
-                        <div className="rounded-xl border bg-muted/40 px-4 py-3">
-                          {allDone ? (
-                            <>
-                              <p className="text-sm font-medium text-green-600">All results entered</p>
-                              <p className="text-xs text-muted-foreground">{completedCount} / {totalCount}</p>
-                            </>
-                          ) : (
-                            <>
-                              <p className="text-lg font-bold">{completedCount} / {totalCount}</p>
-                              <p className="text-xs text-muted-foreground">results entered</p>
-                            </>
-                          )}
-                        </div>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => router.push(`/meetings/${meetingId}/raceday/race/${race.id}`)}
-                        >
-                          Edit race
-                        </Button>
-                      </div>
+                      {race.race_name && (
+                        <p className="text-base font-semibold text-slate-700 dark:text-slate-300">
+                          {race.race_name}
+                        </p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        {[race.race_time, race.race_distance, race.race_class]
+                          .filter(Boolean)
+                          .join(" • ") || "No extra info yet"}
+                      </p>
+                      {race.qualifiers && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950 px-3 py-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                          🏆 Top {race.qualifiers} advance{race.qualifiers_next_stage ? ` to ${race.qualifiers_next_stage}` : ""}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Centred race name + qualifiers */}
-                    <p className="text-center text-sm text-muted-foreground">
-                      {[race.race_time, race.race_distance, race.race_class].filter(Boolean).join(" • ") || "No extra info yet"}
-                    </p>
-                    {(race.race_name || race.qualifiers) && (
-                      <div className="flex flex-col items-center gap-2">
-                        {race.race_name && (
-                          <p className="text-center text-xl font-bold text-slate-800 dark:text-slate-200">
-                            {race.race_name}
-                          </p>
-                        )}
-                        {race.qualifiers && (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-950 px-4 py-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
-                            🏆 Top {race.qualifiers} advance{race.qualifiers_next_stage ? ` to ${race.qualifiers_next_stage}` : ""}
-                          </span>
+                    <div className="min-w-[150px] space-y-2 text-right">
+                      <div className="rounded-xl border bg-muted/40 px-4 py-3">
+                        {allDone ? (
+                          <>
+                            <p className="text-sm font-medium text-green-600">
+                              All results entered
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {completedCount} / {totalCount}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-lg font-bold">
+                              {completedCount} / {totalCount}
+                            </p>
+                            <p className="text-xs text-muted-foreground">results entered</p>
+                          </>
                         )}
                       </div>
-                    )}
+
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() =>
+                          router.push(`/meetings/${meetingId}/raceday/race/${race.id}`)
+                        }
+                      >
+                        Edit race
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
 
