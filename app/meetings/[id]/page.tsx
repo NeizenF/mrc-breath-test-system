@@ -223,29 +223,28 @@ export default function MeetingDetailPage() {
       normalized_full_name: normalizeName(driver.full_name || ""),
     }));
 
-    // Delete all scratched entries for this race before re-importing.
-    // This prevents duplicates when the same URL is imported multiple times.
-    // Active (non-scratched) entries are never touched.
-    const { error: deleteError } = await supabase
+    // Fetch all existing entries for this race and build gate-based maps.
+    const { data: allExisting } = await supabase
       .from("entries")
-      .delete()
-      .eq("race_id", raceId)
-      .eq("scratched", true);
+      .select("id, gate, scratched")
+      .eq("race_id", raceId);
 
-    if (deleteError) throw new Error(deleteError.message);
+    const existing = (allExisting ?? []) as { id: string; gate: number | null; scratched: boolean | null }[];
 
-    // Build gate → id map for active entries only.
-    const { data: activeData } = await supabase
-      .from("entries")
-      .select("id, gate")
-      .eq("race_id", raceId)
-      .eq("scratched", false);
+    // gate → id for active entries
+    const activeByGate = new Map<number, string>();
+    // gate → id for scratched entries
+    const scratchedByGate = new Map<number, string>();
 
-    const activeByGate = new Map<number, string>(
-      ((activeData ?? []) as { id: string; gate: number | null }[])
-        .filter((e) => e.gate !== null)
-        .map((e) => [e.gate as number, e.id])
-    );
+    for (const e of existing) {
+      if (e.gate === null) continue;
+      if (!e.scratched) activeByGate.set(e.gate, e.id);
+      else scratchedByGate.set(e.gate, e.id);
+    }
+
+    // Track which scratched gates we've already processed this import
+    // to prevent duplicates if MRC lists the same horse twice on a page.
+    const processedScratchedGates = new Set<number>();
 
     for (const item of importedEntries) {
       let matchedDriverId: string | null = null;
@@ -270,9 +269,17 @@ export default function MeetingDetailPage() {
       };
 
       if (item.scratched) {
+        if (item.gate === null) continue;
         // Skip if a non-scratched replacement holds this gate
-        if (item.gate !== null && activeByGate.has(item.gate)) continue;
-        const { error } = await supabase.from("entries").insert(payload);
+        if (activeByGate.has(item.gate)) continue;
+        // Skip if we already processed this gate in this import run
+        if (processedScratchedGates.has(item.gate)) continue;
+        processedScratchedGates.add(item.gate);
+        // Update existing scratched entry at this gate, or insert if new
+        const existingId = scratchedByGate.get(item.gate) ?? null;
+        const { error } = existingId
+          ? await supabase.from("entries").update(payload).eq("id", existingId)
+          : await supabase.from("entries").insert(payload);
         if (error) throw new Error(error.message);
       } else {
         const existingId = item.gate !== null ? (activeByGate.get(item.gate) ?? null) : null;
