@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -613,20 +613,21 @@ export default function RaceDayPage() {
     return { total, completed };
   }, [raceProgress]);
 
-  const filteredRowsByRace = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return rowsByRace;
-    const filtered = new Map<number, Row[]>();
-    for (const [raceNum, raceRows] of rowsByRace) {
-      const matching = raceRows.filter(
-        (row) =>
-          row.horse_name?.toLowerCase().includes(term) ||
-          row.driver_name?.toLowerCase().includes(term)
-      );
-      if (matching.length > 0) filtered.set(raceNum, matching);
-    }
-    return filtered;
-  }, [rowsByRace, search]);
+  function highlight(text: string): React.ReactNode {
+    const term = search.trim();
+    if (!term) return text;
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+    return parts.map((part, i) =>
+      part.toLowerCase() === term.toLowerCase() ? (
+        <mark key={i} className="rounded-sm bg-yellow-200 px-0.5 dark:bg-yellow-700 dark:text-white">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  }
 
   function handleMeetingChange(nextMeetingId: string) {
     if (!nextMeetingId || nextMeetingId === meetingId) return;
@@ -847,17 +848,9 @@ export default function RaceDayPage() {
           </Card>
         )}
 
-        {!loading && search && filteredRowsByRace.size === 0 && (
-          <div className="flex flex-col items-center gap-2 py-12 text-center">
-            <span className="text-3xl">🔍</span>
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No results for &ldquo;{search}&rdquo;</p>
-          </div>
-        )}
-
         {!loading &&
           races.map((race) => {
-            const raceRows = filteredRowsByRace.get(race.race_number) || [];
-            if (search && !filteredRowsByRace.has(race.race_number)) return null;
+            const raceRows = rowsByRace.get(race.race_number) || [];
 
             const resultableRows = raceRows.filter(
               (row) => !row.scratched && row.driver_name !== "NOT DECLARED"
@@ -990,11 +983,11 @@ export default function RaceDayPage() {
                                 </td>
                                 <td className="px-3 py-3 font-medium">
                                   {row.scratched
-                                    ? `SCRATCHED${row.horse_name ? ` — ${row.horse_name}` : ""}`
-                                    : row.horse_name || "Unnamed horse"}
+                                    ? <>SCRATCHED{row.horse_name ? <> — {highlight(row.horse_name)}</> : ""}</>
+                                    : highlight(row.horse_name || "Unnamed horse")}
                                 </td>
                                 <td className="px-3 py-3">
-                                  {row.driver_name || "—"}
+                                  {row.driver_name ? highlight(row.driver_name) : "—"}
                                 </td>
                                 <td className="hidden px-3 py-3 text-muted-foreground md:table-cell">
                                   {row.driver_id
