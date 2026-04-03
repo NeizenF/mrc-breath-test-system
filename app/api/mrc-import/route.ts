@@ -204,6 +204,28 @@ function parseRaceClass(text: string): string | null {
   return null;
 }
 
+function parseRaceName(text: string): string | null {
+  const cleaned = text.replace(/\r/g, "");
+  // Match a line containing heat/semi-final/final/championship keywords
+  const m = cleaned.match(
+    /^[ \t]*([^\n]{5,120}(?:heat|semi[\s-]?final|final|championship|qualifier|trophy|cup|plate)[^\n]{0,80})$/mi
+  );
+  if (m?.[1]) return normalizeSpaces(m[1]).trim();
+  return null;
+}
+
+function parseQualifiers(text: string): { count: number; nextStage: string } | null {
+  const cleaned = text.replace(/\r/g, "");
+  const m = cleaned.match(/(\d+)\s+to\s+Qualify(?:\s+for\s+(.+?))?[\r\n]/i);
+  if (m?.[1]) {
+    return {
+      count: parseInt(m[1]),
+      nextStage: normalizeSpaces(m[2] ?? "").trim(),
+    };
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     // Rate limiting
@@ -285,6 +307,8 @@ export async function POST(req: Request) {
     const race_time = parseRaceTime(text);
     const race_distance = parseRaceDistance(text);
     const race_class = parseRaceClass(text);
+    const race_name = parseRaceName(text);
+    const qualifiers = parseQualifiers(text);
     const entries = parseEntriesFromText(text);
 
     return NextResponse.json({
@@ -292,6 +316,8 @@ export async function POST(req: Request) {
       race_time,
       race_distance,
       race_class,
+      race_name,
+      qualifiers,
       entries,
       count: entries.length,
       finalUrl: response.url,

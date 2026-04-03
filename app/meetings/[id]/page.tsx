@@ -152,6 +152,8 @@ export default function MeetingDetailPage() {
     const raceTime = (result.race_time as string | null) ?? null;
     const raceDistance = (result.race_distance as string | null) ?? null;
     const raceClass = (result.race_class as string | null) ?? null;
+    const raceName = (result.race_name as string | null) ?? null;
+    const qualifiersData = result.qualifiers as { count: number; nextStage: string } | null;
     const importedEntries = (result.entries || []) as ImportedEntry[];
 
     if (!raceNumber) {
@@ -184,6 +186,9 @@ export default function MeetingDetailPage() {
           race_time: raceTime,
           race_distance: raceDistance,
           race_class: raceClass,
+          race_name: raceName,
+          qualifiers: qualifiersData?.count ?? null,
+          qualifiers_next_stage: qualifiersData?.nextStage ?? null,
         })
         .eq("id", raceId);
 
@@ -199,6 +204,9 @@ export default function MeetingDetailPage() {
           race_time: raceTime,
           race_distance: raceDistance,
           race_class: raceClass,
+          race_name: raceName,
+          qualifiers: qualifiersData?.count ?? null,
+          qualifiers_next_stage: qualifiersData?.nextStage ?? null,
         })
         .select("id")
         .single();

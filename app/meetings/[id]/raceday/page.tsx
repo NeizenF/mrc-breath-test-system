@@ -22,6 +22,9 @@ type Race = {
   race_time: string | null;
   race_distance: string | null;
   race_class: string | null;
+  race_name: string | null;
+  qualifiers: number | null;
+  qualifiers_next_stage: string | null;
 };
 
 type EntryRow = {
@@ -220,7 +223,7 @@ export default function RaceDayPage() {
           .single(),
         supabase
           .from("races")
-          .select("id,race_number,race_time,race_distance,race_class")
+          .select("id,race_number,race_time,race_distance,race_class,race_name,qualifiers,qualifiers_next_stage")
           .eq("meeting_id", meetingId)
           .order("race_number", { ascending: true }),
       ]);
@@ -1039,11 +1042,21 @@ export default function RaceDayPage() {
                         </span>
                       </div>
 
-                      <p className="text-lg text-muted-foreground">
+                      {race.race_name && (
+                        <p className="text-base font-semibold text-slate-700 dark:text-slate-300">
+                          {race.race_name}
+                        </p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
                         {[race.race_time, race.race_distance, race.race_class]
                           .filter(Boolean)
                           .join(" • ") || "No extra info yet"}
                       </p>
+                      {race.qualifiers && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950 px-3 py-1 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                          🏆 Top {race.qualifiers} advance{race.qualifiers_next_stage ? ` to ${race.qualifiers_next_stage}` : ""}
+                        </span>
+                      )}
                     </div>
 
                     <div className="min-w-[150px] space-y-2 text-right">
