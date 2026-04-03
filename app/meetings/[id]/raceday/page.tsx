@@ -633,9 +633,12 @@ export default function RaceDayPage() {
     return meeting.title || `Meeting ${meeting.meeting_date || ""}`;
   }, [meeting]);
 
-  function parseRaceDateTime(meetingDate: string, raceTime: string): Date | null {
+  function parseRaceTimeToday(raceTime: string): Date | null {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+
     // 24-hour: "13:30"
-    const direct = new Date(`${meetingDate}T${raceTime}:00`);
+    const direct = new Date(`${todayStr}T${raceTime}:00`);
     if (!isNaN(direct.getTime())) return direct;
 
     // 12-hour: "1:30 pm", "1:30pm"
@@ -646,7 +649,7 @@ export default function RaceDayPage() {
       const mer = m[3].toLowerCase();
       if (mer === "pm" && h !== 12) h += 12;
       if (mer === "am" && h === 12) h = 0;
-      const d = new Date(`${meetingDate}T00:00:00`);
+      const d = new Date(`${todayStr}T00:00:00`);
       d.setHours(h, min, 0, 0);
       return d;
     }
@@ -654,17 +657,17 @@ export default function RaceDayPage() {
   }
 
   const nextRaceInfo = useMemo(() => {
-    if (!meeting?.meeting_date || !races.length) return null;
+    if (!races.length) return null;
     for (const race of races) {
       if (!race.race_time) continue;
-      const dt = parseRaceDateTime(meeting.meeting_date, race.race_time);
+      const dt = parseRaceTimeToday(race.race_time);
       if (!dt) continue;
       const diffMs = dt.getTime() - now.getTime();
       if (diffMs > 0) return { race, diffMs };
     }
     return null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, races, meeting]);
+  }, [now, races]);
 
   function formatCountdown(ms: number) {
     const totalSeconds = Math.floor(ms / 1000);
