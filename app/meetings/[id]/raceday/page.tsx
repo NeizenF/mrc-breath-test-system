@@ -1,9 +1,6 @@
 "use client";
 
-import { Orbitron } from "next/font/google";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-const orbitron = Orbitron({ subsets: ["latin"], weight: ["700"] });
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -131,6 +128,7 @@ export default function RaceDayPage() {
   const [matchIndex, setMatchIndex] = useState(-1);
   const [now, setNow] = useState(() => new Date());
   const [clockPos, setClockPos] = useState<{ x: number; y: number } | null>(null);
+  const clockRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
@@ -139,20 +137,45 @@ export default function RaceDayPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Set initial position once window is available
   useEffect(() => {
-    setClockPos({ x: window.innerWidth - 200, y: window.innerHeight - 100 });
+    setClockPos({ x: window.innerWidth - 200, y: window.innerHeight - 110 });
   }, []);
+
+  // Attach native (non-passive) listeners on the clock element to prevent page scroll while dragging
+  useEffect(() => {
+    const el = clockRef.current;
+    if (!el) return;
+
+    function onMouseDown(e: MouseEvent) {
+      draggingRef.current = true;
+      dragOffsetRef.current = { x: e.clientX - (clockPos?.x ?? 0), y: e.clientY - (clockPos?.y ?? 0) };
+      e.preventDefault();
+    }
+    function onTouchStart(e: TouchEvent) {
+      draggingRef.current = true;
+      dragOffsetRef.current = {
+        x: e.touches[0].clientX - (clockPos?.x ?? 0),
+        y: e.touches[0].clientY - (clockPos?.y ?? 0),
+      };
+      e.preventDefault();
+    }
+
+    el.addEventListener("mousedown", onMouseDown);
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    return () => {
+      el.removeEventListener("mousedown", onMouseDown);
+      el.removeEventListener("touchstart", onTouchStart);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockPos]);
 
   useEffect(() => {
     function onMove(e: MouseEvent | TouchEvent) {
       if (!draggingRef.current) return;
+      e.preventDefault();
       const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
       const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-      setClockPos({
-        x: clientX - dragOffsetRef.current.x,
-        y: clientY - dragOffsetRef.current.y,
-      });
+      setClockPos({ x: clientX - dragOffsetRef.current.x, y: clientY - dragOffsetRef.current.y });
     }
     function onUp() { draggingRef.current = false; }
     window.addEventListener("mousemove", onMove);
@@ -166,20 +189,6 @@ export default function RaceDayPage() {
       window.removeEventListener("touchend", onUp);
     };
   }, []);
-
-  function onClockMouseDown(e: React.MouseEvent) {
-    draggingRef.current = true;
-    dragOffsetRef.current = { x: e.clientX - (clockPos?.x ?? 0), y: e.clientY - (clockPos?.y ?? 0) };
-    e.preventDefault();
-  }
-
-  function onClockTouchStart(e: React.TouchEvent) {
-    draggingRef.current = true;
-    dragOffsetRef.current = {
-      x: e.touches[0].clientX - (clockPos?.x ?? 0),
-      y: e.touches[0].clientY - (clockPos?.y ?? 0),
-    };
-  }
 
   const loadMeetingsList = useCallback(async () => {
     setMeetingsLoading(true);
@@ -1182,21 +1191,25 @@ export default function RaceDayPage() {
           })}
       </div>
 
-      {/* Draggable digital clock */}
+      {/* Draggable 7-segment clock */}
       {clockPos && (
         <div
+          ref={clockRef}
           className="fixed z-50 select-none cursor-grab active:cursor-grabbing"
           style={{ left: clockPos.x, top: clockPos.y }}
-          onMouseDown={onClockMouseDown}
-          onTouchStart={onClockTouchStart}
         >
-          <div className="rounded-2xl bg-slate-900 dark:bg-slate-950 px-5 py-3 shadow-2xl ring-1 ring-red-900/60">
-            <div
-              className={`${orbitron.className} text-3xl tabular-nums text-red-500`}
-              style={{ letterSpacing: "0.1em", textShadow: "0 0 10px rgba(239,68,68,0.6), 0 0 20px rgba(239,68,68,0.3)" }}
-            >
-              {now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-            </div>
+          <div
+            className="dseg dseg7"
+            style={{
+              fontFamily: "'DSEG7 Classic', monospace",
+              fontSize: "2.5rem",
+              color: "#ff2200",
+              textShadow: "0 0 8px rgba(255,34,0,0.7), 0 0 20px rgba(255,34,0,0.4)",
+              background: "transparent",
+              letterSpacing: "0.05em",
+            }}
+          >
+            {now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </div>
         </div>
       )}
