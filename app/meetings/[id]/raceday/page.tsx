@@ -125,6 +125,7 @@ export default function RaceDayPage() {
   );
   const [busyEntryIds, setBusyEntryIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const [matchIndex, setMatchIndex] = useState(0);
 
   const loadMeetingsList = useCallback(async () => {
     setMeetingsLoading(true);
@@ -613,6 +614,41 @@ export default function RaceDayPage() {
     return { total, completed };
   }, [raceProgress]);
 
+  const matchingEntryIds = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return [];
+    const ids: string[] = [];
+    for (const race of races) {
+      const raceRows = rowsByRace.get(race.race_number) || [];
+      for (const row of raceRows) {
+        if (
+          row.horse_name?.toLowerCase().includes(term) ||
+          row.driver_name?.toLowerCase().includes(term)
+        ) {
+          ids.push(row.entry_id);
+        }
+      }
+    }
+    return ids;
+  }, [search, races, rowsByRace]);
+
+  // Reset to first match when search changes
+  useEffect(() => { setMatchIndex(0); }, [search]);
+
+  // Scroll to current match
+  useEffect(() => {
+    if (!matchingEntryIds.length) return;
+    const id = matchingEntryIds[matchIndex];
+    document.getElementById(`entry-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [matchIndex, matchingEntryIds]);
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && matchingEntryIds.length > 0) {
+      e.preventDefault();
+      setMatchIndex((prev) => (prev + 1) % matchingEntryIds.length);
+    }
+  }
+
   function highlight(text: string): React.ReactNode {
     const term = search.trim();
     if (!term) return text;
@@ -738,23 +774,32 @@ export default function RaceDayPage() {
         </Card>
 
         {!loading && rows.length > 0 && (
-          <div className="relative">
-            <input
-              type="search"
-              placeholder="Search driver or horse…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border bg-white dark:bg-slate-900 px-4 py-2.5 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:max-w-sm"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg leading-none sm:right-[calc(100%-theme(spacing.sm)+0.75rem)]"
-                style={{ right: "calc(min(100%, 24rem) - 0.75rem - 1.25rem)" }}
-              >
-                ×
-              </button>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="relative w-full sm:max-w-sm">
+              <input
+                type="search"
+                placeholder="Search driver or horse… (Enter to jump)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                className="w-full rounded-xl border bg-white dark:bg-slate-900 px-4 py-2.5 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 pr-20"
+              />
+              {search && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                  <span className="text-xs text-slate-400 tabular-nums">
+                    {matchingEntryIds.length > 0
+                      ? `${matchIndex + 1}/${matchingEntryIds.length}`
+                      : "0"}
+                  </span>
+                  <button
+                    onClick={() => setSearch("")}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -948,11 +993,18 @@ export default function RaceDayPage() {
                           {raceRows.map((row) => {
                             const isBusy = busyEntryIds.includes(row.entry_id);
 
+                            const isActiveMatch =
+                              search.trim() &&
+                              matchingEntryIds[matchIndex] === row.entry_id;
+
                             return (
                               <tr
                                 key={row.entry_id}
-                                className={`border-b align-middle ${
-                                  row.scratched && row.result === "positive"
+                                id={`entry-${row.entry_id}`}
+                                className={`border-b align-middle transition-colors ${
+                                  isActiveMatch
+                                    ? "ring-2 ring-inset ring-yellow-400 bg-yellow-50 dark:bg-yellow-950/40"
+                                    : row.scratched && row.result === "positive"
                                     ? "bg-red-200 opacity-80"
                                     : row.scratched
                                     ? "bg-gray-200 opacity-70"
