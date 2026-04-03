@@ -1,6 +1,9 @@
 "use client";
 
+import { Orbitron } from "next/font/google";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const orbitron = Orbitron({ subsets: ["latin"], weight: ["700"] });
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -127,11 +130,56 @@ export default function RaceDayPage() {
   const [search, setSearch] = useState("");
   const [matchIndex, setMatchIndex] = useState(-1);
   const [now, setNow] = useState(() => new Date());
+  const [clockPos, setClockPos] = useState<{ x: number; y: number } | null>(null);
+  const draggingRef = useRef(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Set initial position once window is available
+  useEffect(() => {
+    setClockPos({ x: window.innerWidth - 200, y: window.innerHeight - 100 });
+  }, []);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent | TouchEvent) {
+      if (!draggingRef.current) return;
+      const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+      const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+      setClockPos({
+        x: clientX - dragOffsetRef.current.x,
+        y: clientY - dragOffsetRef.current.y,
+      });
+    }
+    function onUp() { draggingRef.current = false; }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, []);
+
+  function onClockMouseDown(e: React.MouseEvent) {
+    draggingRef.current = true;
+    dragOffsetRef.current = { x: e.clientX - (clockPos?.x ?? 0), y: e.clientY - (clockPos?.y ?? 0) };
+    e.preventDefault();
+  }
+
+  function onClockTouchStart(e: React.TouchEvent) {
+    draggingRef.current = true;
+    dragOffsetRef.current = {
+      x: e.touches[0].clientX - (clockPos?.x ?? 0),
+      y: e.touches[0].clientY - (clockPos?.y ?? 0),
+    };
+  }
 
   const loadMeetingsList = useCallback(async () => {
     setMeetingsLoading(true);
@@ -1134,17 +1182,24 @@ export default function RaceDayPage() {
           })}
       </div>
 
-      {/* Fixed digital clock */}
-      <div className="fixed bottom-6 right-6 z-50 select-none">
-        <div className="rounded-2xl bg-slate-900 dark:bg-slate-950 px-5 py-3 shadow-2xl ring-1 ring-white/10">
-          <div
-            className="font-mono text-3xl tracking-widest tabular-nums text-green-400"
-            style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.15em" }}
-          >
-            {now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+      {/* Draggable digital clock */}
+      {clockPos && (
+        <div
+          className="fixed z-50 select-none cursor-grab active:cursor-grabbing"
+          style={{ left: clockPos.x, top: clockPos.y }}
+          onMouseDown={onClockMouseDown}
+          onTouchStart={onClockTouchStart}
+        >
+          <div className="rounded-2xl bg-slate-900 dark:bg-slate-950 px-5 py-3 shadow-2xl ring-1 ring-red-900/60">
+            <div
+              className={`${orbitron.className} text-3xl tabular-nums text-red-500`}
+              style={{ letterSpacing: "0.1em", textShadow: "0 0 10px rgba(239,68,68,0.6), 0 0 20px rgba(239,68,68,0.3)" }}
+            >
+              {now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 } 
