@@ -634,35 +634,37 @@ export default function RaceDayPage() {
   }, [meeting]);
 
   function parseRaceDateTime(meetingDate: string, raceTime: string): Date | null {
-    // 24-hour: "13:30"
-    const direct = new Date(`${meetingDate}T${raceTime}:00`);
-    if (!isNaN(direct.getTime())) return direct;
+    const t = raceTime.trim();
 
-    // 12-hour: "1:30 pm", "1:30pm"
-    const m = raceTime.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
-    if (m) {
-      let h = parseInt(m[1]);
-      const min = parseInt(m[2]);
-      const mer = m[3].toLowerCase();
-      if (mer === "pm" && h !== 12) h += 12;
-      if (mer === "am" && h === 12) h = 0;
-      const d = new Date(`${meetingDate}T00:00:00`);
-      d.setHours(h, min, 0, 0);
-      return d;
-    }
-    return null;
+    // Extract HH:MM and optional am/pm from anywhere in the string
+    const m = t.match(/(\d{1,2})[:\.](\d{2})(?:\s*(am|pm))?/i);
+    if (!m) return null;
+
+    let h = parseInt(m[1]);
+    const min = parseInt(m[2]);
+    const mer = m[3]?.toLowerCase();
+    if (mer === "pm" && h !== 12) h += 12;
+    if (mer === "am" && h === 12) h = 0;
+
+    const d = new Date(`${meetingDate}T00:00:00`);
+    if (isNaN(d.getTime())) return null;
+    d.setHours(h, min, 0, 0);
+    return d;
   }
 
   const nextRaceInfo = useMemo(() => {
     if (!meeting?.meeting_date || !races.length) return null;
+    let fallback: { race: Race; diffMs: number } | null = null;
     for (const race of races) {
       if (!race.race_time) continue;
       const dt = parseRaceDateTime(meeting.meeting_date, race.race_time);
       if (!dt) continue;
       const diffMs = dt.getTime() - now.getTime();
       if (diffMs > 0) return { race, diffMs };
+      // Keep track of the most recent past race as fallback
+      if (!fallback || diffMs > fallback.diffMs) fallback = { race, diffMs };
     }
-    return null;
+    return fallback;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, races, meeting]);
 
@@ -909,16 +911,20 @@ export default function RaceDayPage() {
         {!loading && nextRaceInfo && (
           <div
             className={`flex items-center justify-between rounded-xl px-5 py-3 font-semibold transition-colors ${
-              nextRaceInfo.diffMs < 6 * 60 * 1000
+              nextRaceInfo.diffMs < 0
+                ? "bg-slate-600 text-white dark:bg-slate-700"
+                : nextRaceInfo.diffMs < 6 * 60 * 1000
                 ? "bg-red-600 text-white"
                 : "bg-slate-800 text-white dark:bg-slate-700"
             }`}
           >
             <span>
-              Race {nextRaceInfo.race.race_number} — {nextRaceInfo.race.race_time}
+              Race {nextRaceInfo.race.race_number} — {nextRaceInfo.race.race_time?.trim()}
             </span>
             <span className="font-mono text-xl tabular-nums">
-              {formatCountdown(nextRaceInfo.diffMs)}
+              {nextRaceInfo.diffMs < 0
+                ? `started ${formatCountdown(-nextRaceInfo.diffMs)} ago`
+                : formatCountdown(nextRaceInfo.diffMs)}
             </span>
           </div>
         )}
