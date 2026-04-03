@@ -223,6 +223,30 @@ export default function MeetingDetailPage() {
       normalized_full_name: normalizeName(driver.full_name || ""),
     }));
 
+    // Delete all scratched entries for this race before re-importing.
+    // This prevents duplicates when the same URL is imported multiple times.
+    // Active (non-scratched) entries are never touched.
+    const { error: deleteError } = await supabase
+      .from("entries")
+      .delete()
+      .eq("race_id", raceId)
+      .eq("scratched", true);
+
+    if (deleteError) throw new Error(deleteError.message);
+
+    // Build gate → id map for active entries only.
+    const { data: activeData } = await supabase
+      .from("entries")
+      .select("id, gate")
+      .eq("race_id", raceId)
+      .eq("scratched", false);
+
+    const activeByGate = new Map<number, string>(
+      ((activeData ?? []) as { id: string; gate: number | null }[])
+        .filter((e) => e.gate !== null)
+        .map((e) => [e.gate as number, e.id])
+    );
+
     for (const item of importedEntries) {
       let matchedDriverId: string | null = null;
 
@@ -236,16 +260,6 @@ export default function MeetingDetailPage() {
         matchedDriverId = matchedDriver?.id ?? null;
       }
 
-      // Check if a non-scratched entry already exists for this gate
-      // (can't use upsert with onConflict because the unique index is partial)
-      const { data: existing } = await supabase
-        .from("entries")
-        .select("id")
-        .eq("race_id", raceId)
-        .eq("gate", item.gate)
-        .eq("scratched", false)
-        .maybeSingle();
-
       const payload = {
         race_id: raceId,
         gate: item.gate,
@@ -255,12 +269,17 @@ export default function MeetingDetailPage() {
         scratched: item.scratched,
       };
 
-      const { error } = existing
-        ? await supabase.from("entries").update(payload).eq("id", existing.id)
-        : await supabase.from("entries").insert(payload);
-
-      if (error) {
-        throw new Error(error.message);
+      if (item.scratched) {
+        // Skip if a non-scratched replacement holds this gate
+        if (item.gate !== null && activeByGate.has(item.gate)) continue;
+        const { error } = await supabase.from("entries").insert(payload);
+        if (error) throw new Error(error.message);
+      } else {
+        const existingId = item.gate !== null ? (activeByGate.get(item.gate) ?? null) : null;
+        const { error } = existingId
+          ? await supabase.from("entries").update(payload).eq("id", existingId)
+          : await supabase.from("entries").insert(payload);
+        if (error) throw new Error(error.message);
       }
     }
 
