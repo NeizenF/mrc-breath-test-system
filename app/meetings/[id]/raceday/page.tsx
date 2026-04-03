@@ -125,7 +125,7 @@ export default function RaceDayPage() {
   );
   const [busyEntryIds, setBusyEntryIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-  const [matchIndex, setMatchIndex] = useState(0);
+  const [matchIndex, setMatchIndex] = useState(-1);
 
   const loadMeetingsList = useCallback(async () => {
     setMeetingsLoading(true);
@@ -632,20 +632,16 @@ export default function RaceDayPage() {
     return ids;
   }, [search, races, rowsByRace]);
 
-  // Reset to first match when search changes
-  useEffect(() => { setMatchIndex(0); }, [search]);
-
-  // Scroll to current match
-  useEffect(() => {
-    if (!matchingEntryIds.length) return;
-    const id = matchingEntryIds[matchIndex];
-    document.getElementById(`entry-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [matchIndex, matchingEntryIds]);
+  // Reset when search changes — no scroll, just reset position
+  useEffect(() => { setMatchIndex(-1); }, [search]);
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && matchingEntryIds.length > 0) {
       e.preventDefault();
-      setMatchIndex((prev) => (prev + 1) % matchingEntryIds.length);
+      const next = matchIndex === -1 ? 0 : (matchIndex + 1) % matchingEntryIds.length;
+      setMatchIndex(next);
+      document.getElementById(`entry-${matchingEntryIds[next]}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }
 
@@ -788,8 +784,10 @@ export default function RaceDayPage() {
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                   <span className="text-xs text-slate-400 tabular-nums">
                     {matchingEntryIds.length > 0
-                      ? `${matchIndex + 1}/${matchingEntryIds.length}`
-                      : "0"}
+                      ? matchIndex === -1
+                        ? `${matchingEntryIds.length} found`
+                        : `${matchIndex + 1}/${matchingEntryIds.length}`
+                      : "no match"}
                   </span>
                   <button
                     onClick={() => setSearch("")}
@@ -994,7 +992,7 @@ export default function RaceDayPage() {
                             const isBusy = busyEntryIds.includes(row.entry_id);
 
                             const isActiveMatch =
-                              search.trim() &&
+                              matchIndex !== -1 &&
                               matchingEntryIds[matchIndex] === row.entry_id;
 
                             return (
