@@ -126,6 +126,12 @@ export default function RaceDayPage() {
   const [busyEntryIds, setBusyEntryIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [matchIndex, setMatchIndex] = useState(-1);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const loadMeetingsList = useCallback(async () => {
     setMeetingsLoading(true);
@@ -1126,6 +1132,18 @@ export default function RaceDayPage() {
               </Card>
             );
           })}
+      </div>
+
+      {/* Fixed digital clock */}
+      <div className="fixed bottom-6 right-6 z-50 select-none">
+        <div className="rounded-2xl bg-slate-900 dark:bg-slate-950 px-5 py-3 shadow-2xl ring-1 ring-white/10">
+          <div
+            className="font-mono text-3xl tracking-widest tabular-nums text-green-400"
+            style={{ fontVariantNumeric: "tabular-nums", letterSpacing: "0.15em" }}
+          >
+            {now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+          </div>
+        </div>
       </div>
     </div>
   );
