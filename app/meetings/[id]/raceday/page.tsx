@@ -993,7 +993,7 @@ export default function RaceDayPage() {
         )}
 
         {!loading &&
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
           {races.map((race) => {
             const raceRows = rowsByRace.get(race.race_number) || [];
 
