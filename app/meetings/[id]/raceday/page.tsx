@@ -124,6 +124,7 @@ export default function RaceDayPage() {
     "connecting"
   );
   const [busyEntryIds, setBusyEntryIds] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
 
   const loadMeetingsList = useCallback(async () => {
     setMeetingsLoading(true);
@@ -612,6 +613,21 @@ export default function RaceDayPage() {
     return { total, completed };
   }, [raceProgress]);
 
+  const filteredRowsByRace = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return rowsByRace;
+    const filtered = new Map<number, Row[]>();
+    for (const [raceNum, raceRows] of rowsByRace) {
+      const matching = raceRows.filter(
+        (row) =>
+          row.horse_name?.toLowerCase().includes(term) ||
+          row.driver_name?.toLowerCase().includes(term)
+      );
+      if (matching.length > 0) filtered.set(raceNum, matching);
+    }
+    return filtered;
+  }, [rowsByRace, search]);
+
   function handleMeetingChange(nextMeetingId: string) {
     if (!nextMeetingId || nextMeetingId === meetingId) return;
     router.push(`/meetings/${nextMeetingId}/raceday`);
@@ -720,6 +736,27 @@ export default function RaceDayPage() {
           </CardContent>
         </Card>
 
+        {!loading && rows.length > 0 && (
+          <div className="relative">
+            <input
+              type="search"
+              placeholder="Search driver or horse…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border bg-white dark:bg-slate-900 px-4 py-2.5 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:max-w-sm"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg leading-none sm:right-[calc(100%-theme(spacing.sm)+0.75rem)]"
+                style={{ right: "calc(min(100%, 24rem) - 0.75rem - 1.25rem)" }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
+
         {!loading && overallProgress.total > 0 && (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-sm">
@@ -810,9 +847,17 @@ export default function RaceDayPage() {
           </Card>
         )}
 
+        {!loading && search && filteredRowsByRace.size === 0 && (
+          <div className="flex flex-col items-center gap-2 py-12 text-center">
+            <span className="text-3xl">🔍</span>
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No results for &ldquo;{search}&rdquo;</p>
+          </div>
+        )}
+
         {!loading &&
           races.map((race) => {
-            const raceRows = rowsByRace.get(race.race_number) || [];
+            const raceRows = filteredRowsByRace.get(race.race_number) || [];
+            if (search && !filteredRowsByRace.has(race.race_number)) return null;
 
             const resultableRows = raceRows.filter(
               (row) => !row.scratched && row.driver_name !== "NOT DECLARED"
