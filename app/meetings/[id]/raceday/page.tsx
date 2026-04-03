@@ -832,6 +832,12 @@ export default function RaceDayPage() {
             >
               Meeting
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => window.open(`/meetings/${meetingId}/raceday/clock`, "raceclock", "width=700,height=400,resizable=yes")}
+            >
+              Clock ↗
+            </Button>
           </div>
         </div>
 
