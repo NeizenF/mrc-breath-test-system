@@ -633,6 +633,27 @@ export default function RaceDayPage() {
     return meeting.title || `Meeting ${meeting.meeting_date || ""}`;
   }, [meeting]);
 
+  const nextRaceInfo = useMemo(() => {
+    if (!meeting?.meeting_date || !races.length) return null;
+    for (const race of races) {
+      if (!race.race_time) continue;
+      const fullDateTime = new Date(`${meeting.meeting_date}T${race.race_time}`);
+      if (isNaN(fullDateTime.getTime())) continue;
+      const diffMs = fullDateTime.getTime() - now.getTime();
+      if (diffMs > 0) return { race, diffMs };
+    }
+    return null;
+  }, [now, races, meeting]);
+
+  function formatCountdown(ms: number) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+
   const rowsByRace = useMemo(() => {
     const grouped = new Map<number, Row[]>();
 
@@ -864,6 +885,23 @@ export default function RaceDayPage() {
           </div>
         )}
 
+        {!loading && nextRaceInfo && (
+          <div
+            className={`flex items-center justify-between rounded-xl px-5 py-3 font-semibold transition-colors ${
+              nextRaceInfo.diffMs < 6 * 60 * 1000
+                ? "bg-red-600 text-white"
+                : "bg-slate-800 text-white dark:bg-slate-700"
+            }`}
+          >
+            <span>
+              Race {nextRaceInfo.race.race_number} — {nextRaceInfo.race.race_time}
+            </span>
+            <span className="font-mono text-xl tabular-nums">
+              {formatCountdown(nextRaceInfo.diffMs)}
+            </span>
+          </div>
+        )}
+
         {!loading && overallProgress.total > 0 && (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-sm">
@@ -955,7 +993,8 @@ export default function RaceDayPage() {
         )}
 
         {!loading &&
-          races.map((race) => {
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {races.map((race) => {
             const raceRows = rowsByRace.get(race.race_number) || [];
 
             const resultableRows = raceRows.filter(
@@ -1189,6 +1228,7 @@ export default function RaceDayPage() {
               </Card>
             );
           })}
+          </div>}
       </div>
 
       {/* Draggable 7-segment clock */}
