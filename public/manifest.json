@@ -1,0 +1,18 @@
+{
+  "name": "MRC Breath Test System",
+  "short_name": "MRC RaceDay",
+  "description": "Malta Racing Club official breathalyzer testing system",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/mrc-logo.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

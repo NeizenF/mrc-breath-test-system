@@ -18,7 +18,13 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "MRC Breath Test System",
-  description: "MRC race management system",
+  description: "Malta Racing Club official breathalyzer testing system",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "MRC RaceDay",
+  },
 };
 
 export default function RootLayout({
@@ -28,6 +34,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="apple-touch-icon" href="/mrc-logo.jpg" />
+        <meta name="theme-color" content="#0f172a" />
+        <script dangerouslySetInnerHTML={{
+          __html: `if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');`
+        }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
