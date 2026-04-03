@@ -20,6 +20,10 @@ export const metadata: Metadata = {
   title: "MRC Breath Test System",
   description: "Malta Racing Club official breathalyzer testing system",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/mrc-logo.jpg",
+    apple: "/mrc-logo.jpg",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
