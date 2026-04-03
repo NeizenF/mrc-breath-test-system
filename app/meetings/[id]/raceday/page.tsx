@@ -146,11 +146,19 @@ export default function RaceDayPage() {
   }, []);
 
   const loadMeetingAndRaces = useCallback(async () => {
-    const { data: meetingData, error: meetingError } = await supabase
-      .from("meetings")
-      .select("id,title,meeting_date,is_archived")
-      .eq("id", meetingId)
-      .single();
+    const [{ data: meetingData, error: meetingError }, { data: raceData, error: raceError }] =
+      await Promise.all([
+        supabase
+          .from("meetings")
+          .select("id,title,meeting_date,is_archived")
+          .eq("id", meetingId)
+          .single(),
+        supabase
+          .from("races")
+          .select("id,race_number,race_time,race_distance,race_class")
+          .eq("meeting_id", meetingId)
+          .order("race_number", { ascending: true }),
+      ]);
 
     if (meetingError) {
       toast.error(meetingError.message);
@@ -159,12 +167,6 @@ export default function RaceDayPage() {
       setLoading(false);
       return;
     }
-
-    const { data: raceData, error: raceError } = await supabase
-      .from("races")
-      .select("id,race_number,race_time,race_distance,race_class")
-      .eq("meeting_id", meetingId)
-      .order("race_number", { ascending: true });
 
     if (raceError) {
       toast.error(raceError.message);
@@ -208,30 +210,22 @@ export default function RaceDayPage() {
       ] as string[];
       const entryIds = entries.map((e) => e.id);
 
-      let drivers: Driver[] = [];
-      if (driverIds.length > 0) {
-        const { data: driversData, error: driversError } = await supabase
-          .from("drivers")
-          .select("id,full_name,id_card,phone")
-          .in("id", driverIds);
+      const [{ data: driversData, error: driversError }, { data: testsData, error: testsError }] =
+        await Promise.all([
+          driverIds.length > 0
+            ? supabase.from("drivers").select("id,full_name,id_card,phone").in("id", driverIds)
+            : Promise.resolve({ data: [] as Driver[], error: null }),
+          entryIds.length > 0
+            ? supabase
+                .from("tests")
+                .select("id,entry_id,tested,tested_at,tested_by,meeting_id,result")
+                .eq("meeting_id", meetingId)
+                .in("entry_id", entryIds)
+            : Promise.resolve({ data: [] as TestRow[], error: null }),
+        ]);
 
-        if (!driversError) {
-          drivers = (driversData as Driver[]) || [];
-        }
-      }
-
-      let tests: TestRow[] = [];
-      if (entryIds.length > 0) {
-        const { data: testsData, error: testsError } = await supabase
-          .from("tests")
-          .select("id,entry_id,tested,tested_at,tested_by,meeting_id,result")
-          .eq("meeting_id", meetingId)
-          .in("entry_id", entryIds);
-
-        if (!testsError) {
-          tests = (testsData as TestRow[]) || [];
-        }
-      }
+      const drivers: Driver[] = (!driversError && driversData ? driversData : []) as Driver[];
+      const tests: TestRow[] = (!testsError && testsData ? testsData : []) as TestRow[];
 
       const driverMap = new Map(
         drivers.map((d) => [
@@ -293,8 +287,7 @@ export default function RaceDayPage() {
   );
 
   const reloadEverything = useCallback(async () => {
-    await loadMeetingsList();
-    await loadMeetingAndRaces();
+    await Promise.all([loadMeetingsList(), loadMeetingAndRaces()]);
   }, [loadMeetingsList, loadMeetingAndRaces]);
 
   function applyTestChangeToRows(testRow: {

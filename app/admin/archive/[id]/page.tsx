@@ -123,11 +123,21 @@ export default function ArchiveMeetingDetailPage() {
 
         setLoading(true);
 
-        const { data: meetingData, error: meetingError } = await supabase
-          .from("meetings")
-          .select("id,title,meeting_date,created_at")
-          .eq("id", meetingId)
-          .single();
+        const [
+          { data: meetingData, error: meetingError },
+          { data: racesData, error: racesError },
+        ] = await Promise.all([
+          supabase
+            .from("meetings")
+            .select("id,title,meeting_date,created_at")
+            .eq("id", meetingId)
+            .single(),
+          supabase
+            .from("races")
+            .select("id,meeting_id,race_number")
+            .eq("meeting_id", meetingId)
+            .order("race_number", { ascending: true }),
+        ]);
 
         if (meetingError) {
           console.error("Error loading meeting:", meetingError);
@@ -138,12 +148,6 @@ export default function ArchiveMeetingDetailPage() {
           }
           return;
         }
-
-        const { data: racesData, error: racesError } = await supabase
-          .from("races")
-          .select("id,meeting_id,race_number")
-          .eq("meeting_id", meetingId)
-          .order("race_number", { ascending: true });
 
         if (racesError) {
           console.error("Error loading races:", racesError);
