@@ -1201,7 +1201,7 @@ export default function RaceDayPage() {
           <div
             className="dseg dseg7"
             style={{
-              fontFamily: "'DSEG7 Classic', monospace",
+              fontFamily: "'DSEG7-Classic', monospace",
               fontSize: "2.5rem",
               color: "#ff2200",
               textShadow: "0 0 8px rgba(255,34,0,0.7), 0 0 20px rgba(255,34,0,0.4)",

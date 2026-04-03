@@ -1,5 +1,10 @@
 @import "tailwindcss";
-@import "dseg/css/dseg.css";
+@font-face {
+  font-family: 'DSEG7-Classic';
+  src: url('/fonts/DSEG7Classic-Bold.woff2') format('woff2');
+  font-weight: bold;
+  font-style: normal;
+}
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
