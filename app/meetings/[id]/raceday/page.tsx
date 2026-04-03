@@ -914,26 +914,6 @@ export default function RaceDayPage() {
           </div>
         )}
 
-        {!loading && nextRaceInfo && (
-          <div className="flex items-center justify-between rounded-xl bg-slate-900 px-5 py-4 shadow-lg ring-1 ring-white/10">
-            <div className="text-sm font-semibold text-slate-400 uppercase tracking-widest">
-              {nextRaceInfo.diffMs < 0 ? "Last race" : "Next race"} · Race {nextRaceInfo.race.race_number}
-            </div>
-            <div
-              style={{
-                fontFamily: "'DSEG7-Classic', monospace",
-                fontSize: "2rem",
-                color: nextRaceInfo.diffMs < 0 ? "#94a3b8" : nextRaceInfo.diffMs < 6 * 60 * 1000 ? "#ff2200" : "#ff2200",
-                textShadow: nextRaceInfo.diffMs > 0 ? "0 0 8px rgba(255,34,0,0.7), 0 0 20px rgba(255,34,0,0.4)" : "none",
-                letterSpacing: "0.05em",
-              }}
-            >
-              {nextRaceInfo.diffMs < 0
-                ? formatCountdown(-nextRaceInfo.diffMs)
-                : formatCountdown(nextRaceInfo.diffMs)}
-            </div>
-          </div>
-        )}
 
         {!loading && overallProgress.total > 0 && (
           <div className="space-y-1.5">
