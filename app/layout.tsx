@@ -36,6 +36,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/mrc-logo.jpg" />
+        <link rel="icon" type="image/svg+xml" href="/icon.svg" />
         <meta name="theme-color" content="#0f172a" />
         <script dangerouslySetInnerHTML={{
           __html: `if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');`
