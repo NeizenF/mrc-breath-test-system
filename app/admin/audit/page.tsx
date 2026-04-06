@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -17,7 +17,7 @@ type AuditLog = {
   action: string;
   driver_name: string | null;
   race_number: number | null;
-  meetings?: { title: string | null; meeting_date: string | null } | null;
+  meetings?: { title: string | null; meeting_date: string | null }[] | null;
 };
 
 function formatAction(action: string) {
@@ -38,7 +38,7 @@ function formatDate(isoString: string) {
 }
 
 function formatMeetingLabel(log: AuditLog) {
-  const m = log.meetings;
+  const m = Array.isArray(log.meetings) ? log.meetings[0] : log.meetings;
   if (!m) return null;
   const title = m.title?.trim();
   if (title) return title;
