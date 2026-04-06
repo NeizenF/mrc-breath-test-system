@@ -477,6 +477,22 @@ export default function RaceDayPage() {
       )
     );
 
+    // Write audit log (fire-and-forget, don't block UI)
+    const action =
+      nextResult === null ? "cleared" :
+      nextResult === "positive" ? "set_positive" : "set_negative";
+    supabase.from("audit_logs").insert(
+      relatedRows.map((relatedRow) => ({
+        user_id: currentUserId,
+        user_email: session.user.email ?? null,
+        meeting_id: meetingId,
+        entry_id: relatedRow.entry_id,
+        action,
+        driver_name: row.driver_name,
+        race_number: row.race_number,
+      }))
+    );
+
     setBusyEntryIds([]);
   }
 
@@ -795,7 +811,7 @@ export default function RaceDayPage() {
               variant="outline"
               onClick={() => window.open(`/meetings/${meetingId}/raceday/clock`, "raceclock", "width=700,height=400,resizable=yes")}
             >
-              Clock ↗
+              Race Timer
             </Button>
           </div>
         </div>

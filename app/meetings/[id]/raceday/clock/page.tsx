@@ -50,6 +50,7 @@ export default function ClockPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
+    document.title = "Race Timer";
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
