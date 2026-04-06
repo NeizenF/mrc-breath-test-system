@@ -20,27 +20,40 @@ async function verifyAdmin(req: NextRequest): Promise<boolean> {
   return !!data?.is_admin;
 }
 
-// GET /api/admin/users — list all users with admin status
+// GET /api/admin/users — list all users with admin status, suspend status, test count
 export async function GET(req: NextRequest) {
   if (!(await verifyAdmin(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const [
+    { data: { users }, error: usersError },
+    { data: roles },
+    { data: auditEntries },
+  ] = await Promise.all([
+    supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
+    supabaseAdmin.from("user_roles").select("user_id,is_admin"),
+    supabaseAdmin.from("audit_logs").select("user_id"),
+  ]);
 
-  const { data: roles } = await supabaseAdmin
-    .from("user_roles")
-    .select("user_id,is_admin");
+  if (usersError) return NextResponse.json({ error: usersError.message }, { status: 500 });
 
   const roleMap = new Map((roles || []).map((r) => [r.user_id, r.is_admin]));
 
+  const countMap = new Map<string, number>();
+  for (const entry of (auditEntries || [])) {
+    if (entry.user_id) countMap.set(entry.user_id, (countMap.get(entry.user_id) ?? 0) + 1);
+  }
+
+  const now = new Date();
   const result = users.map((u) => ({
     id: u.id,
     email: u.email ?? null,
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at ?? null,
     is_admin: !!roleMap.get(u.id),
+    suspended: u.banned_until ? new Date(u.banned_until) > now : false,
+    test_count: countMap.get(u.id) ?? 0,
   }));
 
   return NextResponse.json({ users: result });

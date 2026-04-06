@@ -20,7 +20,7 @@ async function verifyAdmin(req: NextRequest): Promise<string | null> {
   return data?.is_admin ? user.id : null;
 }
 
-// PATCH /api/admin/users/[id] — toggle admin status
+// PATCH /api/admin/users/[id] — toggle admin or suspend/unsuspend
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -29,17 +29,28 @@ export async function PATCH(
   if (!callerId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   const { id: targetId } = await params;
-  const { is_admin } = await req.json();
+  const body = await req.json();
 
-  if (callerId === targetId && !is_admin) {
+  if (callerId === targetId && body.is_admin === false) {
     return NextResponse.json({ error: "You cannot remove your own admin access." }, { status: 400 });
   }
+  if (callerId === targetId && body.suspended === true) {
+    return NextResponse.json({ error: "You cannot suspend your own account." }, { status: 400 });
+  }
 
-  const { error } = await supabaseAdmin
-    .from("user_roles")
-    .upsert({ user_id: targetId, is_admin }, { onConflict: "user_id" });
+  if (typeof body.is_admin === "boolean") {
+    const { error } = await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: targetId, is_admin: body.is_admin }, { onConflict: "user_id" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (typeof body.suspended === "boolean") {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(targetId, {
+      ban_duration: body.suspended ? "876600h" : "none",
+    });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true });
 }
@@ -53,7 +64,6 @@ export async function DELETE(
   if (!callerId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
   const { id: targetId } = await params;
-
   if (callerId === targetId) {
     return NextResponse.json({ error: "You cannot delete your own account." }, { status: 400 });
   }
@@ -63,3 +73,5 @@ export async function DELETE(
 
   return NextResponse.json({ success: true });
 }
+
+// POST /api/admin/users/[id]/reset is handled in /[id]/reset-password/route.ts

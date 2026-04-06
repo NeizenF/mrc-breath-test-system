@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const MAX_SESSION_AGE_MS = 12 * 60 * 60 * 1000; // force re-login after 12 hours
 
 
 export default function IdleLogout() {
@@ -21,6 +22,7 @@ export default function IdleLogout() {
       isLoggingOutRef.current = true;
 
       try {
+        localStorage.removeItem("mrc_login_time");
         await supabase.auth.signOut();
       } catch (error) {
         console.error("Idle logout failed:", error);
@@ -78,6 +80,13 @@ export default function IdleLogout() {
     events.forEach((event) => {
       window.addEventListener(event, activityHandler, { passive: true });
     });
+
+    // Force re-login if session is older than MAX_SESSION_AGE_MS
+    const loginTime = localStorage.getItem("mrc_login_time");
+    if (loginTime && Date.now() - parseInt(loginTime) > MAX_SESSION_AGE_MS) {
+      void logoutNow();
+      return;
+    }
 
     void resetTimer();
 

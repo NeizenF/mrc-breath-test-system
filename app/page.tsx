@@ -58,6 +58,7 @@ export default function LandingPage() {
 
       if (error) throw error;
 
+      localStorage.setItem("mrc_login_time", Date.now().toString());
       router.replace("/dashboard");
     } catch (err: any) {
       setMessage(err?.message || "Login failed.");
