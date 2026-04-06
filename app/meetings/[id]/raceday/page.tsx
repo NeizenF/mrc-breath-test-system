@@ -1270,7 +1270,7 @@ export default function RaceDayPage() {
               fontFamily: "'DSEG7-Classic', monospace",
               fontSize: "2.5rem",
               color: "#ff2200",
-              textShadow: "0 0 8px rgba(255,34,0,0.7), 0 0 20px rgba(255,34,0,0.4)",
+              textShadow: "none",
               background: "transparent",
               letterSpacing: "0.05em",
             }}
