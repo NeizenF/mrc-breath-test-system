@@ -170,7 +170,7 @@ export default function RaceDayPage() {
       el.removeEventListener("touchstart", onTouchStart);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clockPos]);
+  }, [clockPos, clockVisible]);
 
   useEffect(() => {
     function onMove(e: MouseEvent | TouchEvent) {
