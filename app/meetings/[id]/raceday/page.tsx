@@ -789,7 +789,7 @@ export default function RaceDayPage() {
               variant="outline"
               onClick={() => setClockVisible((v) => !v)}
             >
-              {clockVisible ? "Hide Clock" : "Clock"}
+              {clockVisible ? "Hide Live Clock" : "Live Clock"}
             </Button>
             <Button
               variant="outline"
