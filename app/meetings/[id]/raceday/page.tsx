@@ -122,7 +122,6 @@ export default function RaceDayPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [meetingsLoading, setMeetingsLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState<"connecting" | "live" | "offline">(
     "connecting"
   );
@@ -403,8 +402,6 @@ export default function RaceDayPage() {
     }
 
     const currentUserId = session.user.id;
-    setUserId(currentUserId);
-
     const newTestedValue = nextResult !== null;
     const newTestedAt = nextResult !== null ? new Date().toISOString() : null;
 
@@ -495,7 +492,6 @@ export default function RaceDayPage() {
 
       if (!mounted) return;
 
-      setUserId(data.user.id);
       await reloadEverything();
     })();
 
@@ -509,10 +505,7 @@ export default function RaceDayPage() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || !session?.user) {
-        setUserId(null);
         router.replace("/");
-      } else {
-        setUserId(session.user.id);
       }
     });
 
@@ -635,50 +628,6 @@ export default function RaceDayPage() {
     if (!meeting) return "RaceDay";
     return meeting.title || `Meeting ${meeting.meeting_date || ""}`;
   }, [meeting]);
-
-  function parseRaceDateTime(meetingDate: string, raceTime: string): Date | null {
-    const t = raceTime.trim();
-
-    // Extract HH:MM and optional am/pm from anywhere in the string
-    const m = t.match(/(\d{1,2})[:\.](\d{2})(?:\s*(am|pm))?/i);
-    if (!m) return null;
-
-    let h = parseInt(m[1]);
-    const min = parseInt(m[2]);
-    const mer = m[3]?.toLowerCase();
-    if (mer === "pm" && h !== 12) h += 12;
-    if (mer === "am" && h === 12) h = 0;
-
-    const d = new Date(`${meetingDate}T00:00:00`);
-    if (isNaN(d.getTime())) return null;
-    d.setHours(h, min, 0, 0);
-    return d;
-  }
-
-  const nextRaceInfo = useMemo(() => {
-    if (!meeting?.meeting_date || !races.length) return null;
-    let fallback: { race: Race; diffMs: number } | null = null;
-    for (const race of races) {
-      if (!race.race_time) continue;
-      const dt = parseRaceDateTime(meeting.meeting_date, race.race_time);
-      if (!dt) continue;
-      const diffMs = dt.getTime() - now.getTime();
-      if (diffMs > 0) return { race, diffMs };
-      // Keep track of the most recent past race as fallback
-      if (!fallback || diffMs > fallback.diffMs) fallback = { race, diffMs };
-    }
-    return fallback;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, races, meeting]);
-
-  function formatCountdown(ms: number) {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
-    return `${minutes}:${String(seconds).padStart(2, "0")}`;
-  }
 
   const rowsByRace = useMemo(() => {
     const grouped = new Map<number, Row[]>();
