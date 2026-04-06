@@ -130,6 +130,7 @@ export default function RaceDayPage() {
   const [matchIndex, setMatchIndex] = useState(-1);
   const [now, setNow] = useState(() => new Date());
   const [clockPos, setClockPos] = useState<{ x: number; y: number } | null>(null);
+  const [clockVisible, setClockVisible] = useState(false);
   const clockRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
@@ -786,6 +787,12 @@ export default function RaceDayPage() {
             </Button>
             <Button
               variant="outline"
+              onClick={() => setClockVisible((v) => !v)}
+            >
+              {clockVisible ? "Hide Clock" : "Clock"}
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => window.open(`/meetings/${meetingId}/raceday/clock`, "raceclock", "width=700,height=400,resizable=yes")}
             >
               Clock ↗
@@ -1207,7 +1214,7 @@ export default function RaceDayPage() {
       </div>
 
       {/* Draggable 7-segment clock */}
-      {clockPos && (
+      {clockVisible && clockPos && (
         <div
           ref={clockRef}
           className="fixed z-50 select-none cursor-grab active:cursor-grabbing"
