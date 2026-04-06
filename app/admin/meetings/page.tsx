@@ -293,6 +293,13 @@ export default function MeetingsPage() {
 
                   <Button
                     variant="outline"
+                    onClick={() => router.push(`/admin/declarations/${meeting.id}`)}
+                  >
+                    Runners
+                  </Button>
+
+                  <Button
+                    variant="outline"
                     disabled={archivingId === meeting.id}
                     onClick={() => setConfirmArchiveId(meeting.id)}
                   >

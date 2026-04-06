@@ -8,6 +8,7 @@ import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { normalizeName } from "@/lib/normalizeName";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Meeting = {
   id: string;
@@ -375,11 +376,16 @@ export default function ArchiveMeetingDetailPage() {
       </div>
 
       {loading ? (
-        <Card>
-          <CardContent className="py-10 text-sm text-muted-foreground">
-            Loading archive details...
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="py-6 space-y-3">
+                <Skeleton className="h-5 w-32" />
+                {[1, 2, 3].map((j) => <Skeleton key={j} className="h-10 w-full rounded-lg" />)}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : !meeting ? (
         <Card>
           <CardContent className="py-10 text-sm text-muted-foreground">
