@@ -20,6 +20,51 @@ async function verifyAdmin(req: NextRequest): Promise<string | null> {
   return data?.is_admin ? user.id : null;
 }
 
+// GET /api/admin/users/[id] — get single user with stats
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const callerId = await verifyAdmin(req);
+  if (!callerId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+
+  const { id: targetId } = await params;
+
+  const [
+    { data: { user }, error: userError },
+    { data: role },
+    { data: auditEntries },
+  ] = await Promise.all([
+    supabaseAdmin.auth.admin.getUserById(targetId),
+    supabaseAdmin.from("user_roles").select("is_admin").eq("user_id", targetId).maybeSingle(),
+    supabaseAdmin.from("audit_logs").select("action").eq("user_id", targetId),
+  ]);
+
+  if (userError || !user) return NextResponse.json({ error: "User not found." }, { status: 404 });
+
+  const counts = { total: 0, set_negative: 0, set_positive: 0, cleared: 0 };
+  for (const e of (auditEntries || [])) {
+    counts.total++;
+    if (e.action in counts) counts[e.action as keyof typeof counts]++;
+  }
+
+  const now = new Date();
+  return NextResponse.json({
+    user: {
+      id: user.id,
+      email: user.email ?? null,
+      created_at: user.created_at,
+      last_sign_in_at: user.last_sign_in_at ?? null,
+      is_admin: !!role?.is_admin,
+      suspended: user.banned_until ? new Date(user.banned_until) > now : false,
+      test_count: counts.total,
+      negatives: counts.set_negative,
+      positives: counts.set_positive,
+      cleared: counts.cleared,
+    },
+  });
+}
+
 // PATCH /api/admin/users/[id] — toggle admin or suspend/unsuspend
 export async function PATCH(
   req: NextRequest,

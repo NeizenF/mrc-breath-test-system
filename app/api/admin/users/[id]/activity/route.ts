@@ -36,7 +36,7 @@ export async function GET(
     .select("id,created_at,action,driver_name,race_number,meetings(title,meeting_date)")
     .eq("user_id", targetId)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(100);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
