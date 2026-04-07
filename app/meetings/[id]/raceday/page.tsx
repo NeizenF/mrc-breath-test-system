@@ -233,6 +233,7 @@ export default function RaceDayPage() {
   // Global move/up — handles both clock and timer
   useEffect(() => {
     function onMove(e: MouseEvent | TouchEvent) {
+      if (!draggingRef.current && !timerDraggingRef.current) return;
       e.preventDefault();
       const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
       const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
