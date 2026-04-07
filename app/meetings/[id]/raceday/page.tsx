@@ -9,6 +9,32 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { toast } from "sonner";
 
+function parseRaceDateTime(meetingDate: string, raceTime: string): Date | null {
+  const t = raceTime.trim();
+  const m = t.match(/(\d{1,2})[:.]\s*(\d{2})(?:\s*(am|pm))?/i);
+  if (!m) return null;
+  let h = parseInt(m[1]);
+  const min = parseInt(m[2]);
+  const mer = m[3]?.toLowerCase();
+  if (mer === "pm" && h !== 12) h += 12;
+  if (mer === "am" && h === 12) h = 0;
+  const d = new Date(`${meetingDate}T00:00:00`);
+  if (isNaN(d.getTime())) return null;
+  d.setHours(h, min, 0, 0);
+  return d;
+}
+
+function formatCountdownMs(ms: number) {
+  const totalSeconds = Math.floor(Math.abs(ms) / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  const base = h > 0
+    ? `${h}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+    : `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  return ms < 0 ? `-${base}` : base;
+}
+
 type Meeting = {
   id: string;
   title: string | null;
@@ -129,11 +155,19 @@ export default function RaceDayPage() {
   const [search, setSearch] = useState("");
   const [matchIndex, setMatchIndex] = useState(-1);
   const [now, setNow] = useState(() => new Date());
+  // Live clock
   const [clockPos, setClockPos] = useState<{ x: number; y: number } | null>(null);
   const [clockVisible, setClockVisible] = useState(false);
   const clockRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  // Race timer
+  const [timerPos, setTimerPos] = useState<{ x: number; y: number } | null>(null);
+  const [timerVisible, setTimerVisible] = useState(false);
+  const [timerRaceIndex, setTimerRaceIndex] = useState(0);
+  const timerRef = useRef<HTMLDivElement>(null);
+  const timerDraggingRef = useRef(false);
+  const timerDragOffsetRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -142,6 +176,7 @@ export default function RaceDayPage() {
 
   useEffect(() => {
     setClockPos({ x: window.innerWidth - 200, y: window.innerHeight - 110 });
+    setTimerPos({ x: 16, y: window.innerHeight - 200 });
   }, []);
 
   // Attach native (non-passive) listeners on the clock element to prevent page scroll while dragging
@@ -172,15 +207,39 @@ export default function RaceDayPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clockPos, clockVisible]);
 
+  // Timer drag — element listeners
+  useEffect(() => {
+    const el = timerRef.current;
+    if (!el) return;
+    function onMouseDown(e: MouseEvent) {
+      timerDraggingRef.current = true;
+      timerDragOffsetRef.current = { x: e.clientX - (timerPos?.x ?? 0), y: e.clientY - (timerPos?.y ?? 0) };
+      e.preventDefault();
+    }
+    function onTouchStart(e: TouchEvent) {
+      timerDraggingRef.current = true;
+      timerDragOffsetRef.current = { x: e.touches[0].clientX - (timerPos?.x ?? 0), y: e.touches[0].clientY - (timerPos?.y ?? 0) };
+      e.preventDefault();
+    }
+    el.addEventListener("mousedown", onMouseDown);
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    return () => {
+      el.removeEventListener("mousedown", onMouseDown);
+      el.removeEventListener("touchstart", onTouchStart);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerPos, timerVisible]);
+
+  // Global move/up — handles both clock and timer
   useEffect(() => {
     function onMove(e: MouseEvent | TouchEvent) {
-      if (!draggingRef.current) return;
       e.preventDefault();
       const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
       const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-      setClockPos({ x: clientX - dragOffsetRef.current.x, y: clientY - dragOffsetRef.current.y });
+      if (draggingRef.current) setClockPos({ x: clientX - dragOffsetRef.current.x, y: clientY - dragOffsetRef.current.y });
+      if (timerDraggingRef.current) setTimerPos({ x: clientX - timerDragOffsetRef.current.x, y: clientY - timerDragOffsetRef.current.y });
     }
-    function onUp() { draggingRef.current = false; }
+    function onUp() { draggingRef.current = false; timerDraggingRef.current = false; }
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     window.addEventListener("touchmove", onMove, { passive: false });
@@ -641,6 +700,19 @@ export default function RaceDayPage() {
     };
   }, [meetingId, reloadEverything]);
 
+  const racesWithTime = useMemo(() => races.filter((r) => r.race_time), [races]);
+  const safeTimerIndex = Math.min(timerRaceIndex, Math.max(0, racesWithTime.length - 1));
+  const timerRace = racesWithTime[safeTimerIndex] ?? null;
+  const timerDiffMs = useMemo(() => {
+    if (!timerRace?.race_time || !meeting?.meeting_date) return null;
+    const dt = parseRaceDateTime(meeting.meeting_date, timerRace.race_time);
+    if (!dt) return null;
+    return dt.getTime() - now.getTime();
+  }, [timerRace, meeting, now]);
+  const timerOverdue = timerDiffMs !== null && timerDiffMs < 0;
+  const timerUrgent = timerDiffMs !== null && timerDiffMs >= 0 && timerDiffMs < 6 * 60 * 1000;
+  const timerColor = timerOverdue || timerUrgent ? "#dc2626" : "#1e293b";
+
   const heading = useMemo(() => {
     if (!meeting) return "RaceDay";
     return meeting.title || `Meeting ${meeting.meeting_date || ""}`;
@@ -809,9 +881,9 @@ export default function RaceDayPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => window.open(`/meetings/${meetingId}/raceday/clock`, "raceclock", "width=700,height=400,resizable=yes")}
+              onClick={() => setTimerVisible((v) => !v)}
             >
-              Race Timer
+              {timerVisible ? "Hide Race Timer" : "Race Timer"}
             </Button>
           </div>
         </div>
@@ -1228,6 +1300,48 @@ export default function RaceDayPage() {
           })}
           </div>}
       </div>
+
+      {/* Draggable race timer */}
+      {timerVisible && timerPos && (
+        <div
+          ref={timerRef}
+          className="fixed z-50 select-none cursor-grab active:cursor-grabbing"
+          style={{ left: timerPos.x, top: timerPos.y }}
+        >
+          <div className="rounded-2xl border bg-white dark:bg-slate-900 shadow-xl px-5 py-4 flex flex-col items-center gap-2 min-w-[200px]">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+              {timerOverdue ? "Delayed" : "Next race"}
+            </p>
+            <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">
+              {timerRace ? `Race ${timerRace.race_number}` : "—"}
+            </p>
+            {timerRace?.race_time && (
+              <p className="text-sm text-slate-400">{timerRace.race_time.trim()}</p>
+            )}
+            <div style={{
+              fontFamily: "'DSEG7-Classic', monospace",
+              fontSize: "2rem",
+              color: timerColor,
+              letterSpacing: "0.05em",
+              textShadow: timerOverdue || timerUrgent ? "0 0 12px rgba(220,38,38,0.35)" : "none",
+              transition: "color 0.4s",
+            }}>
+              {timerDiffMs !== null ? formatCountdownMs(timerDiffMs) : "--:--"}
+            </div>
+            {timerRace && safeTimerIndex < racesWithTime.length - 1 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setTimerRaceIndex((i) => i + 1); }}
+                className="mt-1 rounded-xl bg-slate-900 dark:bg-slate-700 px-3 py-1.5 text-xs text-white font-semibold hover:bg-slate-700 dark:hover:bg-slate-600 active:scale-95 transition-all cursor-pointer"
+              >
+                Race {timerRace.race_number} Started →
+              </button>
+            )}
+            {timerRace && safeTimerIndex >= racesWithTime.length - 1 && (
+              <p className="mt-1 text-xs text-slate-400">Last race</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Draggable 7-segment clock */}
       {clockVisible && clockPos && (
