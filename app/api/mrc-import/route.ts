@@ -112,7 +112,7 @@ function parseEntriesFromText(text: string): ParsedEntry[] {
       next ? next.index : cleaned.length
     );
 
-    const scratched =
+    let scratched =
       /(?:^|\n)\s*SCRATCHED\s*(?:\n|$)/i.test(block) ||
       /\bSCRATCHED\b/i.test(block);
 
@@ -120,9 +120,14 @@ function parseEntriesFromText(text: string): ParsedEntry[] {
 
     if (!scratched) {
       const driverMatch = block.match(/Driver:\s*([^\n]+)/i);
-
       if (driverMatch?.[1]) {
-        driver_name_raw = cleanDriverName(driverMatch[1]);
+        const driverText = normalizeSpaces(driverMatch[1]);
+        if (/SCRATCHED/i.test(driverText)) {
+          // Driver field explicitly says SCRATCHED
+          scratched = true;
+        } else {
+          driver_name_raw = cleanDriverName(driverMatch[1]);
+        }
       }
     }
 

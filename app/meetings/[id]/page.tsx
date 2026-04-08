@@ -278,13 +278,11 @@ export default function MeetingDetailPage() {
 
       if (item.scratched) {
         if (item.gate === null) continue;
-        // Skip if a non-scratched replacement holds this gate
-        if (activeByGate.has(item.gate)) continue;
         // Skip if we already processed this gate in this import run
         if (processedScratchedGates.has(item.gate)) continue;
         processedScratchedGates.add(item.gate);
-        // Update existing scratched entry at this gate, or insert if new
-        const existingId = scratchedByGate.get(item.gate) ?? null;
+        // Update whichever entry exists at this gate (active or scratched), or insert
+        const existingId = activeByGate.get(item.gate) ?? scratchedByGate.get(item.gate) ?? null;
         const { error } = existingId
           ? await supabase.from("entries").update(payload).eq("id", existingId)
           : await supabase.from("entries").insert(payload);
