@@ -1205,31 +1205,31 @@ export default function RaceDayPage() {
                                     : "—"}
                                 </td>
                                 <td className="px-3 py-3">
-                                  {(() => {
-                                    const disabled = isBusy || row.scratched || row.driver_name === "NOT DECLARED";
-                                    return (
-                                      <div className={`inline-flex rounded-full border overflow-hidden text-xs font-semibold ${disabled ? "opacity-40 pointer-events-none" : ""}`}>
-                                        <button
-                                          onClick={() => setResultForRow(row, "negative")}
-                                          className={`px-3 py-1.5 transition-colors ${row.result === "negative" ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "hover:bg-muted text-muted-foreground"}`}
-                                        >
-                                          {isBusy && row.result !== "negative" ? "…" : "Neg"}
-                                        </button>
-                                        <button
-                                          onClick={() => setResultForRow(row, "positive")}
-                                          className={`border-l border-r px-3 py-1.5 transition-colors ${row.result === "positive" ? "bg-red-600 text-white" : "hover:bg-muted text-muted-foreground"}`}
-                                        >
-                                          {isBusy && row.result !== "positive" ? "…" : "Pos"}
-                                        </button>
-                                        <button
-                                          onClick={() => setResultForRow(row, null)}
-                                          className={`px-3 py-1.5 transition-colors ${!row.result ? "text-muted-foreground/40" : "hover:bg-muted text-muted-foreground"}`}
-                                        >
-                                          ✕
-                                        </button>
-                                      </div>
-                                    );
-                                  })()}
+                                  <div className="flex gap-2">
+                                    <Button
+                                      variant={row.result === "negative" ? "default" : "outline"}
+                                      onClick={() => setResultForRow(row, "negative")}
+                                      disabled={isBusy || row.scratched || row.driver_name === "NOT DECLARED"}
+                                      className="min-w-[88px]"
+                                    >
+                                      {isBusy && row.result !== "negative" ? "Saving..." : "Negative"}
+                                    </Button>
+                                    <Button
+                                      variant={row.result === "positive" ? "destructive" : "outline"}
+                                      onClick={() => setResultForRow(row, "positive")}
+                                      disabled={isBusy || row.scratched || row.driver_name === "NOT DECLARED"}
+                                      className="min-w-[88px]"
+                                    >
+                                      {isBusy && row.result !== "positive" ? "Saving..." : "Positive"}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => setResultForRow(row, null)}
+                                      disabled={isBusy || row.scratched || row.driver_name === "NOT DECLARED"}
+                                    >
+                                      Clear
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             );
