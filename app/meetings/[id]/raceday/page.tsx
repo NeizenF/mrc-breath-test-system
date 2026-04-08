@@ -829,70 +829,29 @@ export default function RaceDayPage() {
           { label: "RaceDay" },
         ]} />
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{heading}</h1>
-              <span className="flex items-center gap-1.5">
-                <span className="relative flex h-2 w-2">
-                  {liveStatus === "live" && (
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                  )}
-                  <span
-                    className={`relative inline-flex h-2 w-2 rounded-full ${
-                      liveStatus === "live"
-                        ? "bg-green-500"
-                        : liveStatus === "offline"
-                        ? "bg-red-500"
-                        : "bg-yellow-400"
-                    }`}
-                  />
-                </span>
-                <span
-                  className={`text-xs font-medium ${
-                    liveStatus === "live"
-                      ? "text-green-700"
-                      : liveStatus === "offline"
-                      ? "text-red-700"
-                      : "text-yellow-700"
-                  }`}
-                >
-                  {liveStatus === "live"
-                    ? "Live"
-                    : liveStatus === "offline"
-                    ? "Offline"
-                    : "Connecting..."}
-                </span>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <h1 className="text-xl font-semibold truncate">{heading}</h1>
+            <span className="flex shrink-0 items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                {liveStatus === "live" && (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                )}
+                <span className={`relative inline-flex h-2 w-2 rounded-full ${liveStatus === "live" ? "bg-green-500" : liveStatus === "offline" ? "bg-red-500" : "bg-yellow-400"}`} />
               </span>
-            </div>
-
-            <p className="text-sm text-muted-foreground">RaceDay control panel</p>
+              <span className={`text-xs font-medium ${liveStatus === "live" ? "text-green-700" : liveStatus === "offline" ? "text-red-700" : "text-yellow-700"}`}>
+                {liveStatus === "live" ? "Live" : liveStatus === "offline" ? "Offline" : "Connecting..."}
+              </span>
+            </span>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => router.push("/dashboard")}>
-              Home
-            </Button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => router.push("/dashboard")}>Home</Button>
             {isAdmin && (
-              <Button
-                variant="outline"
-                onClick={() => router.push(`/meetings/${meetingId}`)}
-              >
-                Meeting
-              </Button>
+              <Button size="sm" variant="ghost" onClick={() => router.push(`/meetings/${meetingId}`)}>Meeting</Button>
             )}
-            <Button
-              variant="outline"
-              onClick={() => setClockVisible((v) => !v)}
-            >
-              {clockVisible ? "Hide Live Clock" : "Live Clock"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setTimerVisible((v) => !v)}
-            >
-              {timerVisible ? "Hide Race Timer" : "Race Timer"}
-            </Button>
+            <Button size="sm" variant={clockVisible ? "secondary" : "ghost"} onClick={() => setClockVisible((v) => !v)}>Clock</Button>
+            <Button size="sm" variant={timerVisible ? "secondary" : "ghost"} onClick={() => setTimerVisible((v) => !v)}>Timer</Button>
           </div>
         </div>
 
@@ -1246,54 +1205,31 @@ export default function RaceDayPage() {
                                     : "—"}
                                 </td>
                                 <td className="px-3 py-3">
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button
-                                      variant={
-                                        row.result === "negative" ? "default" : "outline"
-                                      }
-                                      onClick={() => setResultForRow(row, "negative")}
-                                      disabled={
-                                        isBusy ||
-                                        row.scratched ||
-                                        row.driver_name === "NOT DECLARED"
-                                      }
-                                      className="min-w-[96px]"
-                                    >
-                                      {isBusy && row.result !== "negative"
-                                        ? "Saving..."
-                                        : "Negative"}
-                                    </Button>
-
-                                    <Button
-                                      variant={
-                                        row.result === "positive" ? "destructive" : "outline"
-                                      }
-                                      onClick={() => setResultForRow(row, "positive")}
-                                      disabled={
-                                        isBusy ||
-                                        row.scratched ||
-                                        row.driver_name === "NOT DECLARED"
-                                      }
-                                      className="min-w-[96px]"
-                                    >
-                                      {isBusy && row.result !== "positive"
-                                        ? "Saving..."
-                                        : "Positive"}
-                                    </Button>
-
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => setResultForRow(row, null)}
-                                      disabled={
-                                        isBusy ||
-                                        row.scratched ||
-                                        row.driver_name === "NOT DECLARED"
-                                      }
-                                      className="min-w-[80px]"
-                                    >
-                                      Clear
-                                    </Button>
-                                  </div>
+                                  {(() => {
+                                    const disabled = isBusy || row.scratched || row.driver_name === "NOT DECLARED";
+                                    return (
+                                      <div className={`inline-flex rounded-full border overflow-hidden text-xs font-semibold ${disabled ? "opacity-40 pointer-events-none" : ""}`}>
+                                        <button
+                                          onClick={() => setResultForRow(row, "negative")}
+                                          className={`px-3 py-1.5 transition-colors ${row.result === "negative" ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "hover:bg-muted text-muted-foreground"}`}
+                                        >
+                                          {isBusy && row.result !== "negative" ? "…" : "Neg"}
+                                        </button>
+                                        <button
+                                          onClick={() => setResultForRow(row, "positive")}
+                                          className={`border-l border-r px-3 py-1.5 transition-colors ${row.result === "positive" ? "bg-red-600 text-white" : "hover:bg-muted text-muted-foreground"}`}
+                                        >
+                                          {isBusy && row.result !== "positive" ? "…" : "Pos"}
+                                        </button>
+                                        <button
+                                          onClick={() => setResultForRow(row, null)}
+                                          className={`px-3 py-1.5 transition-colors ${!row.result ? "text-muted-foreground/40" : "hover:bg-muted text-muted-foreground"}`}
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                               </tr>
                             );

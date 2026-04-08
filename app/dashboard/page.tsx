@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarDays } from "lucide-react";
+import Image from "next/image";
 
 type ActiveMeeting = {
   id: string;
@@ -156,8 +157,8 @@ export default function DashboardPage() {
               <div className="px-8 py-10 sm:px-10 sm:py-12">
 
                 <div className="mb-8 text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 dark:bg-slate-700 text-2xl shadow-md">
-                    🐎
+                  <div className="mx-auto mb-4 overflow-hidden rounded-2xl shadow-md">
+                    <Image src="/mrc-logo.jpg" alt="MRC" width={56} height={56} className="h-14 w-14 object-cover" />
                   </div>
                   <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl">
                     RaceDay
