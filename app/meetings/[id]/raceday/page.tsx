@@ -551,7 +551,7 @@ export default function RaceDayPage() {
         entry_id: relatedRow.entry_id,
         action,
         driver_name: row.driver_name,
-        race_number: row.race_number,
+        race_number: relatedRow.race_number,
       }))
     ).then(({ error: auditError }) => {
       if (auditError) console.error("Audit log insert failed:", auditError);
