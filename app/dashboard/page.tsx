@@ -157,9 +157,7 @@ export default function DashboardPage() {
               <div className="px-8 py-10 sm:px-10 sm:py-12">
 
                 <div className="mb-8 text-center">
-                  <div className="mx-auto mb-4 overflow-hidden rounded-2xl shadow-md">
-                    <Image src="/mrc-logo.jpg" alt="MRC" width={56} height={56} className="h-14 w-14 object-cover" />
-                  </div>
+                  <Image src="/mrc-logo.jpg" alt="MRC" width={72} height={72} className="mx-auto mb-5 h-18 w-18 rounded-full object-cover shadow-lg ring-4 ring-white dark:ring-slate-800" />
                   <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl">
                     RaceDay
                   </h1>
