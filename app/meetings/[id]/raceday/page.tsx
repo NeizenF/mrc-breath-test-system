@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { toast } from "sonner";
+import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 
 function parseRaceDateTime(meetingDate: string, raceTime: string): Date | null {
   const t = raceTime.trim();
@@ -161,6 +162,7 @@ export default function RaceDayPage() {
   const clockRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const [isAdmin, setIsAdmin] = useState(false);
   // Race timer
   const [timerPos, setTimerPos] = useState<{ x: number; y: number } | null>(null);
   const [timerVisible, setTimerVisible] = useState(false);
@@ -569,6 +571,9 @@ export default function RaceDayPage() {
 
       if (!mounted) return;
 
+      const admin = await isCurrentUserAdmin();
+      if (mounted) setIsAdmin(admin);
+
       await reloadEverything();
     })();
 
@@ -868,12 +873,14 @@ export default function RaceDayPage() {
             <Button variant="outline" onClick={() => router.push("/dashboard")}>
               Home
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/meetings/${meetingId}`)}
-            >
-              Meeting
-            </Button>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/meetings/${meetingId}`)}
+              >
+                Meeting
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => setClockVisible((v) => !v)}
