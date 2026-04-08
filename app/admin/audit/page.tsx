@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 type AuditLog = {
   id: string;
@@ -48,11 +51,25 @@ function formatMeetingLabel(log: AuditLog) {
   return null;
 }
 
+const ACTION_OPTIONS = [
+  { value: "", label: "All actions" },
+  { value: "set_positive", label: "Positive" },
+  { value: "set_negative", label: "Negative" },
+  { value: "cleared", label: "Cleared" },
+];
+
 export default function AuditLogPage() {
   const router = useRouter();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingAccess, setCheckingAccess] = useState(true);
+
+  // Filters
+  const [actionFilter, setActionFilter] = useState("");
+  const [userFilter, setUserFilter] = useState("");
+  const [meetingFilter, setMeetingFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -73,7 +90,7 @@ export default function AuditLogPage() {
           .from("audit_logs")
           .select("id,created_at,user_email,meeting_id,entry_id,action,driver_name,race_number,meetings(title,meeting_date)")
           .order("created_at", { ascending: false })
-          .limit(300);
+          .limit(500);
 
         if (error) {
           console.error("Failed to load audit logs:", error);
@@ -91,6 +108,46 @@ export default function AuditLogPage() {
     return () => { mounted = false; };
   }, [router]);
 
+  const filtered = useMemo(() => {
+    return logs.filter((log) => {
+      if (actionFilter && log.action !== actionFilter) return false;
+      if (userFilter && !(log.user_email ?? "").toLowerCase().includes(userFilter.toLowerCase())) return false;
+      if (meetingFilter) {
+        const label = formatMeetingLabel(log) ?? "";
+        if (!label.toLowerCase().includes(meetingFilter.toLowerCase())) return false;
+      }
+      if (dateFrom) {
+        const logDate = log.created_at.slice(0, 10);
+        if (logDate < dateFrom) return false;
+      }
+      if (dateTo) {
+        const logDate = log.created_at.slice(0, 10);
+        if (logDate > dateTo) return false;
+      }
+      return true;
+    });
+  }, [logs, actionFilter, userFilter, meetingFilter, dateFrom, dateTo]);
+
+  const hasFilters = actionFilter || userFilter || meetingFilter || dateFrom || dateTo;
+
+  function clearFilters() {
+    setActionFilter("");
+    setUserFilter("");
+    setMeetingFilter("");
+    setDateFrom("");
+    setDateTo("");
+  }
+
+  // Group filtered logs by date
+  const grouped = filtered.reduce<Record<string, AuditLog[]>>((acc, log) => {
+    const dateKey = formatDate(log.created_at);
+    if (!acc[dateKey]) acc[dateKey] = [];
+    acc[dateKey].push(log);
+    return acc;
+  }, {});
+
+  const dateKeys = Object.keys(grouped);
+
   if (checkingAccess) {
     return (
       <div className="p-4 md:p-6 space-y-4">
@@ -100,34 +157,83 @@ export default function AuditLogPage() {
     );
   }
 
-  // Group logs by date
-  const grouped = logs.reduce<Record<string, AuditLog[]>>((acc, log) => {
-    const dateKey = formatDate(log.created_at);
-    if (!acc[dateKey]) acc[dateKey] = [];
-    acc[dateKey].push(log);
-    return acc;
-  }, {});
-
-  const dateKeys = Object.keys(grouped);
-
   return (
     <div className="p-4 md:p-6">
       <div className="mb-2">
         <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Audit Log" }]} />
       </div>
-      <div className="mb-6 mt-4">
-        <h1 className="text-xl font-semibold tracking-tight">Audit Log</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Test actions recorded during race days.</p>
+      <div className="mb-6 mt-4 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Audit Log</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Test actions recorded during race days.</p>
+        </div>
+        {!loading && (
+          <p className="shrink-0 text-sm text-muted-foreground pt-1">
+            {filtered.length}{filtered.length !== logs.length ? ` of ${logs.length}` : ""} entries
+          </p>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="mb-5 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {ACTION_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setActionFilter(opt.value)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors border ${
+                actionFilter === opt.value
+                  ? "bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100"
+                  : "border-slate-200 dark:border-slate-700 text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            placeholder="Filter by user email..."
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+            className="h-8 w-full max-w-[220px] text-sm"
+          />
+          <Input
+            placeholder="Filter by meeting..."
+            value={meetingFilter}
+            onChange={(e) => setMeetingFilter(e.target.value)}
+            className="h-8 w-full max-w-[200px] text-sm"
+          />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-8 w-auto text-sm"
+            title="From date"
+          />
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-8 w-auto text-sm"
+            title="To date"
+          />
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 gap-1 text-xs">
+              <X className="h-3 w-3" /> Clear
+            </Button>
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
         </div>
-      ) : logs.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No audit log entries yet.
+            {logs.length === 0 ? "No audit log entries yet." : "No entries match the current filters."}
           </CardContent>
         </Card>
       ) : (
