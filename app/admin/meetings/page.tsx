@@ -4,33 +4,35 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { toast } from "sonner";
-import { PageHeader } from "@/components/pageHeader";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { ChevronRight } from "lucide-react";
 
 type Meeting = {
   id: string;
   title: string | null;
   meeting_date: string | null;
   created_at?: string | null;
-  is_archived?: boolean;
 };
 
 function formatMeetingDate(dateStr: string | null) {
   if (!dateStr) return "No date";
-
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
 
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+function isToday(dateStr: string | null) {
+  if (!dateStr) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return dateStr.slice(0, 10) === today;
+}
+
+function isUpcoming(dateStr: string | null) {
+  if (!dateStr) return false;
+  return dateStr.slice(0, 10) > new Date().toISOString().slice(0, 10);
 }
 
 export default function MeetingsPage() {
@@ -38,177 +40,38 @@ export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingAccess, setCheckingAccess] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [archivingId, setArchivingId] = useState<string | null>(null);
-  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-
-  async function loadMeetings() {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("meetings")
-      .select("id,title,meeting_date,created_at,is_archived")
-      .eq("is_archived", false)
-      .order("meeting_date", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false, nullsFirst: false });
-
-    if (error) {
-      console.error("Error loading meetings:", error);
-      setMeetings([]);
-    } else {
-      setMeetings(data || []);
-    }
-
-    setLoading(false);
-  }
 
   useEffect(() => {
     let mounted = true;
-
-    async function checkAccess() {
+    async function init() {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
+        const { data: { session } } = await supabase.auth.getSession();
         if (!mounted) return;
-
-        if (!session) {
-          router.replace("/");
-          return;
-        }
-
+        if (!session) { router.replace("/"); return; }
         const admin = await isCurrentUserAdmin();
-
         if (!mounted) return;
-
-        if (!admin) {
-          router.replace("/dashboard");
-          return;
-        }
-
+        if (!admin) { router.replace("/dashboard"); return; }
         setCheckingAccess(false);
-        await loadMeetings();
-      } catch (error) {
-        console.error("Failed to check admin access:", error);
-        router.replace("/dashboard");
-      }
+
+        const { data } = await supabase
+          .from("meetings")
+          .select("id,title,meeting_date,created_at")
+          .eq("is_archived", false)
+          .order("meeting_date", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false, nullsFirst: false });
+
+        if (mounted) { setMeetings(data || []); setLoading(false); }
+      } catch { router.replace("/dashboard"); }
     }
-
-    checkAccess();
-
-    return () => {
-      mounted = false;
-    };
+    init();
+    return () => { mounted = false; };
   }, [router]);
-
-  async function doArchiveMeeting(meetingId: string) {
-    setConfirmArchiveId(null);
-    setArchivingId(meetingId);
-
-    try {
-      const { error } = await supabase
-        .from("meetings")
-        .update({ is_archived: true })
-        .eq("id", meetingId);
-
-      if (error) throw error;
-
-      setMeetings((prev) => prev.filter((m) => m.id !== meetingId));
-    } catch (error) {
-      console.error("Archive meeting failed:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to archive meeting. Check console for details."
-      );
-    } finally {
-      setArchivingId(null);
-    }
-  }
-
-  async function doDeleteMeeting(meetingId: string) {
-    setConfirmDeleteId(null);
-    setDeletingId(meetingId);
-
-    try {
-      const { data: races, error: racesFetchError } = await supabase
-        .from("races")
-        .select("id")
-        .eq("meeting_id", meetingId);
-
-      if (racesFetchError) throw racesFetchError;
-
-      const raceIds = (races || []).map((r) => r.id);
-
-      const { error: testsDeleteError } = await supabase
-        .from("tests")
-        .delete()
-        .eq("meeting_id", meetingId);
-
-      if (testsDeleteError) throw testsDeleteError;
-
-      if (raceIds.length > 0) {
-        const { error: entriesDeleteError } = await supabase
-          .from("entries")
-          .delete()
-          .in("race_id", raceIds);
-
-        if (entriesDeleteError) throw entriesDeleteError;
-
-        const { error: racesDeleteError } = await supabase
-          .from("races")
-          .delete()
-          .eq("meeting_id", meetingId);
-
-        if (racesDeleteError) throw racesDeleteError;
-      }
-
-      const { data: deletedMeeting, error: meetingDeleteError } = await supabase
-        .from("meetings")
-        .delete()
-        .eq("id", meetingId)
-        .select("id");
-
-      if (meetingDeleteError) throw meetingDeleteError;
-
-      if (!deletedMeeting || deletedMeeting.length === 0) {
-        throw new Error(
-          "Meeting row was not deleted. This is usually an RLS policy issue or the row no longer matched the delete condition."
-        );
-      }
-
-      setMeetings((prev) => prev.filter((m) => m.id !== meetingId));
-      router.refresh();
-    } catch (error) {
-      console.error("Delete meeting failed:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to delete meeting. Check console for details."
-      );
-    } finally {
-      setDeletingId(null);
-    }
-  }
 
   if (checkingAccess) {
     return (
-      <div className="p-4 md:p-6 space-y-6">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-7 w-36" />
-            <Skeleton className="h-4 w-56" />
-          </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-9 w-24" />
-            <Skeleton className="h-9 w-32" />
-          </div>
-        </div>
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-24 w-full rounded-xl" />
-        ))}
+      <div className="p-4 md:p-6 space-y-4">
+        <Skeleton className="h-7 w-36" />
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
       </div>
     );
   }
@@ -218,28 +81,20 @@ export default function MeetingsPage() {
       <div className="mb-2">
         <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Meetings" }]} />
       </div>
-      <div className="mb-6 mt-4">
-        <PageHeader
-          title="Meetings"
-          subtitle="Manage your active race meetings."
-          actions={
-            <>
-              <Button variant="outline" onClick={() => router.push("/admin/archive")}>
-                Archive
-              </Button>
-              <Button onClick={() => router.push("/meetings/new")}>
-                New Meeting
-              </Button>
-            </>
-          }
-        />
+      <div className="mb-6 mt-4 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Meetings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Active race meetings.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push("/admin/archive")}>Archive</Button>
+          <Button onClick={() => router.push("/meetings/new")}>New Meeting</Button>
+        </div>
       </div>
 
       {loading ? (
-        <div className="grid gap-4">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 w-full rounded-xl" />
-          ))}
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
         </div>
       ) : meetings.length === 0 ? (
         <Card>
@@ -248,96 +103,38 @@ export default function MeetingsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
-          {meetings.map((meeting) => (
-            <Card key={meeting.id}>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">
-                  {meeting.title?.trim() || "Untitled Meeting"}
-                </CardTitle>
-              </CardHeader>
-
-              <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="text-sm text-muted-foreground">
-                  {formatMeetingDate(meeting.meeting_date)}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push(`/meetings/${meeting.id}/edit`)}
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {meetings.map((meeting) => {
+                const today = isToday(meeting.meeting_date);
+                const upcoming = isUpcoming(meeting.meeting_date);
+                return (
+                  <button
+                    key={meeting.id}
+                    onClick={() => router.push(`/admin/meetings/${meeting.id}`)}
+                    className="group flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
                   >
-                    Edit
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push(`/meetings/${meeting.id}`)}
-                  >
-                    Open
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push(`/meetings/${meeting.id}/print`)}
-                  >
-                    Print
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push(`/meetings/${meeting.id}/raceday`)}
-                  >
-                    RaceDay
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push(`/admin/declarations/${meeting.id}`)}
-                  >
-                    Runners
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    disabled={archivingId === meeting.id}
-                    onClick={() => setConfirmArchiveId(meeting.id)}
-                  >
-                    {archivingId === meeting.id ? "Archiving..." : "Archive"}
-                  </Button>
-
-                  <Button
-                    variant="destructive"
-                    disabled={deletingId === meeting.id}
-                    onClick={() => setConfirmDeleteId(meeting.id)}
-                  >
-                    {deletingId === meeting.id ? "Deleting..." : "Delete"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{meeting.title?.trim() || "Untitled Meeting"}</span>
+                        {today && (
+                          <span className="rounded-full bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 px-2 py-0.5 text-xs font-medium">Today</span>
+                        )}
+                        {!today && upcoming && (
+                          <span className="rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-2 py-0.5 text-xs font-medium">Upcoming</span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{formatMeetingDate(meeting.meeting_date)}</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition group-hover:translate-x-0.5" />
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
       )}
-
-      <ConfirmDialog
-        open={confirmArchiveId !== null}
-        title="Archive meeting?"
-        description="This meeting will be removed from Meetings and shown in Archive."
-        confirmLabel="Archive"
-        onConfirm={() => confirmArchiveId && doArchiveMeeting(confirmArchiveId)}
-        onCancel={() => setConfirmArchiveId(null)}
-      />
-
-      <ConfirmDialog
-        open={confirmDeleteId !== null}
-        title="Delete meeting?"
-        description="This will permanently delete the meeting along with all its races, entries, and tests."
-        confirmLabel="Delete"
-        variant="destructive"
-        onConfirm={() => confirmDeleteId && doDeleteMeeting(confirmDeleteId)}
-        onCancel={() => setConfirmDeleteId(null)}
-      />
     </div>
   );
 }
