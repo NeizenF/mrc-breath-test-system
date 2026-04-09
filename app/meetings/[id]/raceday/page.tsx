@@ -6,7 +6,6 @@ import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Breadcrumbs } from "@/components/breadcrumbs";
 import { toast } from "sonner";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 
@@ -825,35 +824,32 @@ export default function RaceDayPage() {
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
-        <Breadcrumbs items={[
-          { label: "Meetings", href: "/admin/meetings" },
-          { label: heading, href: `/meetings/${meetingId}` },
-          { label: "RaceDay" },
-        ]} />
-
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-xl font-semibold truncate">{heading}</h1>
-            <span className="flex shrink-0 items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                {liveStatus === "live" && (
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                )}
-                <span className={`relative inline-flex h-2 w-2 rounded-full ${liveStatus === "live" ? "bg-green-500" : liveStatus === "offline" ? "bg-red-500" : "bg-yellow-400"}`} />
-              </span>
-              <span className={`text-xs font-medium ${liveStatus === "live" ? "text-green-700" : liveStatus === "offline" ? "text-red-700" : "text-yellow-700"}`}>
-                {liveStatus === "live" ? "Live" : liveStatus === "offline" ? "Offline" : "Connecting..."}
-              </span>
-            </span>
+            <div className="min-w-0">
+              <h1 className="text-base font-bold truncate text-slate-900 dark:text-slate-100">{heading}</h1>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  {liveStatus === "live" && (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                  )}
+                  <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${liveStatus === "live" ? "bg-green-500" : liveStatus === "offline" ? "bg-red-500" : "bg-yellow-400"}`} />
+                </span>
+                <span className={`text-[11px] font-medium ${liveStatus === "live" ? "text-green-600 dark:text-green-400" : liveStatus === "offline" ? "text-red-600 dark:text-red-400" : "text-yellow-600 dark:text-yellow-400"}`}>
+                  {liveStatus === "live" ? "Live" : liveStatus === "offline" ? "Offline" : "Connecting..."}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Button size="sm" variant="ghost" onClick={() => router.push("/dashboard")}>Home</Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button size="sm" variant="ghost" className="text-xs h-8 px-3" onClick={() => router.push("/dashboard")}>Home</Button>
             {isAdmin && (
-              <Button size="sm" variant="ghost" onClick={() => router.push(`/meetings/${meetingId}`)}>Meeting</Button>
+              <Button size="sm" variant="ghost" className="text-xs h-8 px-3" onClick={() => router.push(`/meetings/${meetingId}`)}>Meeting</Button>
             )}
-            <Button size="sm" variant={clockVisible ? "secondary" : "ghost"} onClick={() => setClockVisible((v) => !v)}>Clock</Button>
-            <Button size="sm" variant={timerVisible ? "secondary" : "ghost"} onClick={() => setTimerVisible((v) => !v)}>Timer</Button>
+            <div className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+            <Button size="sm" variant={clockVisible ? "secondary" : "ghost"} className="text-xs h-8 px-3" onClick={() => setClockVisible((v) => !v)}>Clock</Button>
+            <Button size="sm" variant={timerVisible ? "secondary" : "ghost"} className="text-xs h-8 px-3" onClick={() => setTimerVisible((v) => !v)}>Timer</Button>
           </div>
         </div>
 
