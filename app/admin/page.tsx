@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
-import { CalendarDays, Users, ArchiveIcon, ChevronRight, CalendarRange, ClipboardList, UserCog } from "lucide-react";
+import { CalendarDays, Users, ArchiveIcon, ChevronRight, CalendarRange, ClipboardList, UserCog, Printer } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const CARDS = [
@@ -43,6 +43,12 @@ const CARDS = [
     icon: UserCog,
     title: "Users",
     description: "Manage user access and invite new users.",
+  },
+  {
+    href: "/admin/prints",
+    icon: Printer,
+    title: "Prints",
+    description: "Print checklists and declaration letters for any meeting.",
   },
 ];
 
