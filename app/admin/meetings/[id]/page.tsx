@@ -10,7 +10,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import {
-  CalendarDays, Flag, CheckCircle, AlertCircle,
+  CalendarDays, Flag, CheckCircle, AlertCircle, Users,
   Play, FileInput, Pencil, ScrollText, FileText, LayoutList,
   Archive, Trash2,
 } from "lucide-react";
@@ -25,6 +25,7 @@ type Meeting = {
 type Stats = {
   races: number;
   entries: number;
+  drivers: number;
   tested: number;
   positives: number;
 };
@@ -78,19 +79,29 @@ export default function MeetingProfilePage() {
 
         const raceIds = (races || []).map((r) => r.id);
         let entryCount = 0;
+        let driverCount = 0;
         if (raceIds.length > 0) {
-          const { count } = await supabase
+          const { data: entries, count } = await supabase
             .from("entries")
-            .select("id", { count: "exact", head: true })
+            .select("id,driver_id,driver_name_raw", { count: "exact" })
             .in("race_id", raceIds)
             .eq("scratched", false);
           entryCount = count ?? 0;
+
+          // Count unique drivers
+          const seen = new Set<string>();
+          for (const e of entries ?? []) {
+            const key = e.driver_id ? `id:${e.driver_id}` : `name:${e.driver_name_raw ?? ""}`;
+            if (key !== "name:") seen.add(key);
+          }
+          driverCount = seen.size;
         }
 
         const testRows = tests || [];
         setStats({
           races: races?.length ?? 0,
           entries: entryCount,
+          drivers: driverCount,
           tested: testRows.filter((t) => t.result !== null).length,
           positives: testRows.filter((t) => t.result === "positive").length,
         });
@@ -147,6 +158,7 @@ export default function MeetingProfilePage() {
   const statItems = stats ? [
     { icon: CalendarDays, label: "Races", value: stats.races, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950" },
     { icon: Flag, label: "Runners", value: stats.entries, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-950" },
+    { icon: Users, label: "Drivers", value: stats.drivers, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950" },
     { icon: CheckCircle, label: "Tested", value: stats.tested, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950" },
     { icon: AlertCircle, label: "Positives", value: stats.positives, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-950" },
   ] : [];
@@ -197,7 +209,7 @@ export default function MeetingProfilePage() {
 
           {/* Stats */}
           {stats && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               {statItems.map(({ icon: Icon, label, value, color, bg }) => (
                 <div key={label} className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
                   <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-xl ${bg}`}>
