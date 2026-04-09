@@ -15,6 +15,12 @@ const CARDS = [
     description: "Create meetings, import races, and manage race day data.",
   },
   {
+    href: "/admin/prints",
+    icon: Printer,
+    title: "Prints",
+    description: "Print checklists and declaration letters for any meeting.",
+  },
+  {
     href: "/admin/drivers",
     icon: Users,
     title: "DriverInfo",
@@ -43,12 +49,6 @@ const CARDS = [
     icon: UserCog,
     title: "Users",
     description: "Manage user access and invite new users.",
-  },
-  {
-    href: "/admin/prints",
-    icon: Printer,
-    title: "Prints",
-    description: "Print checklists and declaration letters for any meeting.",
   },
 ];
 
