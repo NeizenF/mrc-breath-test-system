@@ -168,6 +168,7 @@ export default function MeetingProfilePage() {
     { icon: FileInput, label: "Import / Races", color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-950", onClick: () => router.push(`/meetings/${meetingId}`) },
     { icon: Pencil, label: "Edit Details", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950", onClick: () => router.push(`/meetings/${meetingId}/edit`) },
     { icon: LayoutList, label: "Summary", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950", onClick: () => router.push(`/meetings/${meetingId}/summary`) },
+    { icon: LayoutList, label: "Race Cards", color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-950", onClick: () => router.push(`/meetings/${meetingId}/racecard`) },
     { icon: ScrollText, label: "Print Checklist", color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950", onClick: () => router.push(`/meetings/${meetingId}/print`) },
     { icon: FileText, label: "Declaration", color: "text-pink-600 dark:text-pink-400", bg: "bg-pink-50 dark:bg-pink-950", onClick: () => router.push(`/meetings/${meetingId}/declaration`) },
   ];

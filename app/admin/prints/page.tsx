@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Button } from "@/components/ui/button";
-import { FileText, ScrollText, Printer } from "lucide-react";
+import { FileText, ScrollText, Printer, LayoutList } from "lucide-react";
 
 type Meeting = {
   id: string;
@@ -117,6 +117,15 @@ export default function AdminPrintsPage() {
           {date && <p className="mt-0.5 text-xs text-muted-foreground">{date}</p>}
         </div>
         <div className="flex shrink-0 gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-xs"
+            onClick={() => window.open(`/meetings/${m.id}/racecard`, "_blank")}
+          >
+            <LayoutList className="h-3.5 w-3.5" />
+            Race Cards
+          </Button>
           <Button
             size="sm"
             variant="outline"
