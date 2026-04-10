@@ -47,6 +47,8 @@ type RaceEntry = {
 
 type RaceWithEntries = Race & { entries: RaceEntry[] };
 
+const MIN_ROWS = 16;
+
 export default function RaceCardPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -64,8 +66,10 @@ export default function RaceCardPage() {
 
       const [{ data: m }, { data: racesData }] = await Promise.all([
         supabase.from("meetings").select("id,title,meeting_date").eq("id", meetingId).single(),
-        supabase.from("races").select("id,race_number,race_time,race_distance,race_class,race_name,qualifiers,qualifiers_next_stage")
-          .eq("meeting_id", meetingId).order("race_number", { ascending: true }),
+        supabase.from("races")
+          .select("id,race_number,race_time,race_distance,race_class,race_name,qualifiers,qualifiers_next_stage")
+          .eq("meeting_id", meetingId)
+          .order("race_number", { ascending: true }),
       ]);
 
       if (!m || !racesData) { setLoading(false); return; }
@@ -123,19 +127,88 @@ export default function RaceCardPage() {
   const meetingDate = meeting.meeting_date ? formatDateLong(meeting.meeting_date) : "—";
 
   return (
-    <div className="min-h-screen bg-white text-black">
+    <div className="bg-white text-black">
       <style jsx global>{`
+        * { box-sizing: border-box; }
+
         @media print {
           .no-print { display: none !important; }
-          body { background: white !important; }
+          html, body { background: white !important; margin: 0; padding: 0; }
           @page { size: A4 portrait; margin: 10mm 12mm; }
-          .race-page { page-break-after: always; }
-          .race-page:last-child { page-break-after: avoid; }
-          tr { page-break-inside: avoid; }
+
+          .race-page {
+            page-break-after: always;
+            break-after: page;
+          }
+          .race-page:last-child {
+            page-break-after: avoid;
+            break-after: avoid;
+          }
         }
+
+        .race-page {
+          width: 100%;
+          height: 277mm;
+          display: flex;
+          flex-direction: column;
+          padding: 6mm;
+        }
+
+        .race-table-wrap {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        .race-table {
+          width: 100%;
+          height: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+          font-size: 11px;
+        }
+
+        .race-table thead tr {
+          background: #1e293b;
+          color: white;
+        }
+
+        .race-table thead th {
+          border: 1px solid #475569;
+          padding: 5px 8px;
+          text-align: left;
+          font-weight: 600;
+        }
+
+        .race-table tbody {
+          height: 100%;
+        }
+
+        .race-table tbody tr {
+          height: calc(100% / ${MIN_ROWS});
+        }
+
+        .race-table tbody td {
+          border: 1px solid #cbd5e1;
+          padding: 3px 8px;
+          vertical-align: middle;
+        }
+
+        .race-table .col-gate { width: 52px; text-align: center; font-weight: 600; }
+        .race-table .col-horse { width: 35%; }
+        .race-table .col-driver { width: 35%; }
+        .race-table .col-remarks { width: 18%; }
+
+        .row-even { background: #ffffff; }
+        .row-odd  { background: #f8fafc; }
+        .row-scratched { background: #f1f5f9; opacity: 0.6; }
+
+        .scratched-text { text-decoration: line-through; color: #94a3b8; }
+        .not-declared { font-style: italic; color: #94a3b8; }
       `}</style>
 
-      {/* Toolbar */}
+      {/* Toolbar - screen only */}
       <div className="no-print border-b px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -150,115 +223,78 @@ export default function RaceCardPage() {
       </div>
 
       {/* Race pages */}
-      {races.map((race, idx) => (
-        <div key={race.id} className="race-page mx-auto max-w-[780px] px-6 py-6">
+      {races.map((race, idx) => {
+        const entryCount = race.entries.length;
+        const blankCount = Math.max(0, MIN_ROWS - entryCount);
 
-          {/* Page header */}
-          <div className="mb-4 flex items-center justify-between border-b-2 border-slate-800 pb-3">
-            <div className="flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/mrc-logo.jpg" alt="MRC" className="h-12 w-12 object-contain" />
-              <div>
-                <div className="text-[16px] font-bold uppercase tracking-wide text-slate-800">Malta Racing Club</div>
-                <div className="text-[12px] text-slate-600">{meetingTitle} · {meetingDate}</div>
+        return (
+          <div key={race.id} className="race-page">
+
+            {/* Page header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid #1e293b", paddingBottom: "6px", marginBottom: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/mrc-logo.jpg" alt="MRC" style={{ height: "44px", width: "44px", objectFit: "contain" }} />
+                <div>
+                  <div style={{ fontSize: "15px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b" }}>Malta Racing Club</div>
+                  <div style={{ fontSize: "11px", color: "#64748b" }}>{meetingTitle} · {meetingDate}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 500 }}>{idx + 1}/{totalPages}</div>
+            </div>
+
+            {/* Race info band */}
+            <div style={{ display: "flex", border: "2px solid #1e293b", borderRadius: "6px", overflow: "hidden", marginBottom: "6px" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "white", padding: "8px 16px", minWidth: "70px" }}>
+                <div style={{ fontSize: "9px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", opacity: 0.7 }}>Race</div>
+                <div style={{ fontSize: "26px", fontWeight: 900, lineHeight: 1 }}>{race.race_number}</div>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 20px", padding: "8px 14px", fontSize: "11px", alignContent: "center" }}>
+                {race.race_time && <div><strong style={{ color: "#475569" }}>Time:</strong> {race.race_time}</div>}
+                {race.race_distance && <div><strong style={{ color: "#475569" }}>Distance:</strong> {race.race_distance}</div>}
+                {race.race_class && <div><strong style={{ color: "#475569" }}>Class:</strong> {race.race_class}</div>}
+                {race.qualifiers != null && <div><strong style={{ color: "#475569" }}>Qualifiers:</strong> {race.qualifiers}{race.qualifiers_next_stage ? ` → ${race.qualifiers_next_stage}` : ""}</div>}
+                {race.race_name && <div style={{ width: "100%" }}><strong style={{ color: "#475569" }}>Name:</strong> {race.race_name}</div>}
               </div>
             </div>
-            <div className="text-[11px] text-slate-400 font-medium">{idx + 1}/{totalPages}</div>
-          </div>
 
-          {/* Race info band */}
-          <div className="mb-4 flex flex-wrap gap-3 rounded-lg border-2 border-slate-800 overflow-hidden">
-            {/* Race number block */}
-            <div className="flex min-w-[70px] flex-col items-center justify-center bg-slate-800 px-4 py-3 text-white">
-              <div className="text-[10px] font-semibold uppercase tracking-widest opacity-70">Race</div>
-              <div className="text-[28px] font-black leading-none">{race.race_number}</div>
-            </div>
-
-            {/* Race details */}
-            <div className="flex flex-1 flex-wrap gap-x-6 gap-y-1 px-4 py-3 text-[12px]">
-              {race.race_time && (
-                <div>
-                  <span className="font-semibold text-slate-600">Time: </span>
-                  <span>{race.race_time}</span>
-                </div>
-              )}
-              {race.race_distance && (
-                <div>
-                  <span className="font-semibold text-slate-600">Distance: </span>
-                  <span>{race.race_distance}</span>
-                </div>
-              )}
-              {race.race_class && (
-                <div>
-                  <span className="font-semibold text-slate-600">Class: </span>
-                  <span>{race.race_class}</span>
-                </div>
-              )}
-              {race.race_name && (
-                <div className="w-full">
-                  <span className="font-semibold text-slate-600">Name: </span>
-                  <span>{race.race_name}</span>
-                </div>
-              )}
-              {race.qualifiers != null && (
-                <div>
-                  <span className="font-semibold text-slate-600">Qualifiers: </span>
-                  <span>{race.qualifiers}{race.qualifiers_next_stage ? ` → ${race.qualifiers_next_stage}` : ""}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Entries table */}
-          <table className="w-full border-collapse text-[12px]">
-            <thead>
-              <tr className="bg-slate-800 text-white text-left">
-                <th className="border border-slate-600 px-3 py-2 w-[60px] text-center">Gate</th>
-                <th className="border border-slate-600 px-3 py-2">Horse</th>
-                <th className="border border-slate-600 px-3 py-2">Driver</th>
-                <th className="border border-slate-600 px-3 py-2 w-[140px]">Remarks</th>
-              </tr>
-            </thead>
-            <tbody>
-              {race.entries.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="border border-slate-300 px-3 py-6 text-center text-slate-400">
-                    No entries
-                  </td>
-                </tr>
-              ) : (
-                race.entries.map((entry, i) => (
-                  <tr
-                    key={i}
-                    className={`${entry.scratched ? "bg-slate-100 opacity-60" : i % 2 === 0 ? "bg-white" : "bg-slate-50"}`}
-                  >
-                    <td className="border border-slate-300 px-3 py-2 text-center font-semibold">
-                      {entry.gate ?? "—"}
-                    </td>
-                    <td className={`border border-slate-300 px-3 py-2 ${entry.scratched ? "line-through text-slate-400" : ""}`}>
-                      {entry.horse}
-                    </td>
-                    <td className={`border border-slate-300 px-3 py-2 ${entry.scratched ? "line-through text-slate-400" : entry.driver === "Not Declared" ? "italic text-slate-400" : ""}`}>
-                      {entry.scratched ? "SCRATCHED" : entry.driver}
-                    </td>
-                    <td className="border border-slate-300 px-3 py-2">&nbsp;</td>
+            {/* Table */}
+            <div className="race-table-wrap">
+              <table className="race-table">
+                <thead>
+                  <tr>
+                    <th className="col-gate">Gate</th>
+                    <th className="col-horse">Horse</th>
+                    <th className="col-driver">Driver</th>
+                    <th className="col-remarks">Remarks</th>
                   </tr>
-                ))
-              )}
-              {/* Extra blank rows for notes */}
-              {Array.from({ length: Math.max(0, 3 - race.entries.length) }).map((_, i) => (
-                <tr key={`blank-${i}`}>
-                  <td className="border border-slate-300 px-3 py-2">&nbsp;</td>
-                  <td className="border border-slate-300 px-3 py-2">&nbsp;</td>
-                  <td className="border border-slate-300 px-3 py-2">&nbsp;</td>
-                  <td className="border border-slate-300 px-3 py-2">&nbsp;</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {race.entries.map((entry, i) => (
+                    <tr key={i} className={entry.scratched ? "row-scratched" : i % 2 === 0 ? "row-even" : "row-odd"}>
+                      <td className="col-gate">{entry.gate ?? "—"}</td>
+                      <td className={`col-horse${entry.scratched ? " scratched-text" : ""}`}>{entry.horse}</td>
+                      <td className={`col-driver${entry.scratched ? " scratched-text" : entry.driver === "Not Declared" ? " not-declared" : ""}`}>
+                        {entry.scratched ? "SCRATCHED" : entry.driver}
+                      </td>
+                      <td className="col-remarks"></td>
+                    </tr>
+                  ))}
+                  {Array.from({ length: blankCount }).map((_, i) => (
+                    <tr key={`blank-${i}`} className={(entryCount + i) % 2 === 0 ? "row-even" : "row-odd"}>
+                      <td className="col-gate"></td>
+                      <td className="col-horse"></td>
+                      <td className="col-driver"></td>
+                      <td className="col-remarks"></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
