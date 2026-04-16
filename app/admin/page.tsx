@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import {
   CalendarDays, ArchiveIcon, CalendarRange,
-  ClipboardList, UserCog, Printer, Flag,
+  ClipboardList, UserCog, Printer, Flag, Timer,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -27,6 +27,13 @@ const GROUPS = [
         title: "Prints",
         description: "Print checklists and declaration letters.",
         color: "bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400",
+      },
+      {
+        href: "/race-timer.html",
+        icon: Timer,
+        title: "Video Timer",
+        description: "Time segments from YouTube race videos.",
+        color: "bg-orange-50 dark:bg-orange-950 text-orange-600 dark:text-orange-400",
       },
     ],
   },
@@ -140,7 +147,7 @@ export default function AdminPage() {
                     {items.map(({ href, icon: Icon, title, description, color }) => (
                       <button
                         key={href}
-                        onClick={() => router.push(href)}
+                        onClick={() => href.startsWith("/race-timer") ? window.open(href, "_blank") : router.push(href)}
                         className="group flex w-full items-start gap-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-5 py-4 text-left shadow-sm transition hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md active:scale-[0.99]"
                       >
                         <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${color}`}>
