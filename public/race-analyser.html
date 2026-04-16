@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Race Line Detector</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #0a0f1e;
+      --s1:     #111827;
+      --s2:     #1f2937;
+      --s3:     #374151;
+      --text:   #f1f5f9;
+      --muted:  #6b7280;
+      --muted2: #4b5563;
+      --blue:   #3b82f6;
+      --green:  #22c55e;
+      --red:    #ef4444;
+      --purple: #a78bfa;
+      --yellow: #fbbf24;
+      --orange: #f97316;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* Topbar */
+    .topbar { background: var(--s1); border-bottom: 1px solid var(--s2); padding: 10px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .topbar-title { font-size: .8rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+    .topbar-badge { background: var(--orange); color: #fff; font-size: .63rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; letter-spacing: .05em; }
+    .btn-file-lbl { background: var(--blue); border-radius: 7px; color: #fff; cursor: pointer; font-size: .82rem; font-weight: 600; padding: 8px 16px; transition: opacity .15s; }
+    .btn-file-lbl:hover { opacity: .85; }
+
+    /* Layout */
+    .main { display: grid; grid-template-columns: 1fr; gap: 14px; padding: 14px; max-width: 1500px; margin: 0 auto; }
+    @media (min-width: 1040px) { .main { grid-template-columns: 1fr 380px; align-items: start; } }
+
+    /* Canvas area */
+    .video-panel { display: flex; flex-direction: column; gap: 8px; }
+    .canvas-wrap { position: relative; background: #000; border-radius: 10px; overflow: hidden; }
+    .canvas-wrap canvas { display: block; width: 100%; }
+    .canvas-wrap.draw canvas { cursor: crosshair; }
+    .canvas-placeholder { aspect-ratio: 16/9; background: var(--s1); border: 2px dashed var(--s3); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted2); }
+    .canvas-placeholder svg { width: 44px; height: 44px; opacity: .28; }
+    .canvas-placeholder p { font-size: .85rem; }
+
+    /* VC bar */
+    .vc-bar { background: var(--s1); border: 1px solid var(--s2); border-radius: 10px; padding: 9px 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .vc-lbl { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); white-space: nowrap; }
+    .vc-group { display: flex; align-items: center; gap: 4px; }
+    .vdiv { width: 1px; height: 22px; background: var(--s3); margin: 0 3px; }
+    .ic-btn { background: var(--s2); border: 1px solid var(--s3); border-radius: 6px; color: var(--text); cursor: pointer; font-size: .76rem; font-weight: 600; padding: 5px 10px; transition: background .12s; white-space: nowrap; }
+    .ic-btn:hover { background: var(--s3); }
+    .ic-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+    /* Scrubber */
+    .scrubber-row { display: flex; align-items: center; gap: 8px; }
+    .scrubber { flex: 1; accent-color: var(--blue); height: 4px; cursor: pointer; }
+    .time-lbl { font-size: .72rem; color: var(--muted); font-family: monospace; white-space: nowrap; min-width: 84px; text-align: right; }
+
+    /* Control panel */
+    .ctrl-panel { display: flex; flex-direction: column; gap: 11px; }
+    .card { background: var(--s1); border: 1px solid var(--s2); border-radius: 12px; padding: 15px; }
+    .card-lbl { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 10px; }
+
+    /* Mode toggle */
+    .mode-toggle { display: flex; background: var(--s2); border-radius: 8px; padding: 3px; gap: 3px; }
+    .mode-btn { flex: 1; border: none; border-radius: 6px; cursor: pointer; font-size: .75rem; font-weight: 600; padding: 7px; text-align: center; transition: all .15s; background: transparent; color: var(--muted); }
+    .mode-btn.on { background: var(--s1); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+
+    /* Lines */
+    .lines-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; min-height: 24px; }
+    .line-item { display: flex; align-items: center; gap: 7px; background: var(--s2); border: 1px solid var(--s3); border-radius: 7px; padding: 7px 10px; transition: background .2s, border-color .2s; }
+    .line-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .line-name { flex: 1; font-size: .79rem; font-weight: 600; }
+    .line-del { background: none; border: none; color: var(--muted2); cursor: pointer; font-size: .78rem; padding: 2px 5px; border-radius: 4px; line-height: 1; }
+    .line-del:hover { color: var(--red); background: rgba(239,68,68,.12); }
+    .line-item.flash { background: rgba(34,197,94,.15); border-color: var(--green); }
+    .add-line-row { display: flex; gap: 6px; }
+    .add-line-row input { flex: 1; background: var(--s2); border: 1px solid var(--s3); border-radius: 6px; color: var(--text); font-size: .78rem; padding: 7px 10px; outline: none; min-width: 0; }
+    .add-line-row input:focus { border-color: var(--blue); }
+    .add-line-row input::placeholder { color: var(--muted2); }
+    .btn-add { background: var(--blue); border: none; border-radius: 6px; color: #fff; cursor: pointer; font-size: .78rem; font-weight: 600; padding: 7px 12px; white-space: nowrap; }
+    .btn-add:hover { opacity: .85; }
+
+    /* Race start */
+    .start-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .start-time { font-family: monospace; font-size: .85rem; color: var(--green); min-width: 50px; }
+    .btn-sm { border: none; border-radius: 6px; cursor: pointer; font-size: .74rem; font-weight: 600; padding: 6px 11px; }
+    .btn-sm.blue { background: var(--blue); color: #fff; }
+    .btn-sm.blue:hover { opacity: .85; }
+    .btn-sm.ghost { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.25); color: var(--red); }
+    .btn-sm.ghost:hover { background: rgba(239,68,68,.22); }
+
+    /* Sensitivity */
+    .sens-row { display: flex; align-items: center; gap: 9px; }
+    .sens-row input[type=range] { flex: 1; accent-color: var(--blue); }
+    .sens-val { font-size: .78rem; font-family: monospace; color: var(--blue); min-width: 26px; }
+
+    /* Results */
+    .results-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .results-table th { background: var(--s2); color: var(--muted); font-size: .63rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--s3); }
+    .results-table th:not(:first-child) { text-align: right; }
+    .results-table td { padding: 7px 10px; border-bottom: 1px solid var(--s2); vertical-align: middle; }
+    .results-table td:not(:first-child) { text-align: right; font-family: monospace; }
+    .results-table tr:last-child td { border-bottom: none; }
+    .results-empty { text-align: center; color: var(--muted2); font-size: .78rem; padding: 20px 10px; }
+    .lbl-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; flex-shrink: 0; }
+
+    /* Status */
+    .status { font-size: .7rem; color: var(--muted); min-height: 14px; margin-top: 7px; }
+    .status.ok   { color: var(--green); }
+    .status.warn { color: var(--yellow); }
+    .status.info { color: var(--blue); }
+
+    /* Shortcuts */
+    .sc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+    .sc-row { display: flex; align-items: center; gap: 6px; font-size: .7rem; color: var(--muted); }
+    .kbd { background: var(--s2); border: 1px solid var(--s3); border-bottom: 2px solid var(--s3); border-radius: 4px; font-family: monospace; font-size: .65rem; padding: 2px 6px; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-title">Race Line Detector</span>
+  <span class="topbar-badge">EXPERIMENTAL</span>
+  <label class="btn-file-lbl">
+    <input type="file" accept="video/*" style="display:none" onchange="loadLocalVideo(this)" />
+    Load Video File
+  </label>
+  <span style="font-size:.72rem;color:var(--muted2)">Works with local video files — download the race footage first</span>
+</div>
+
+<div class="main">
+
+  <!-- Left: video canvas + playback -->
+  <div class="video-panel">
+    <div id="canvasWrap" class="canvas-wrap">
+      <div id="placeholder" class="canvas-placeholder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+        <p>Load a local video file to begin</p>
+        <p style="font-size:.75rem;margin-top:-4px">YouTube videos cannot be analysed due to browser security restrictions</p>
+      </div>
+      <canvas id="mainCanvas" style="display:none"></canvas>
+    </div>
+
+    <div class="vc-bar" id="vcBar" style="display:none">
+      <div class="vc-group">
+        <button class="ic-btn" id="playBtn" onclick="togglePlay()" disabled>▶ Play</button>
+        <button class="ic-btn" id="bwdBtn"  onclick="seekRel(-5)"  disabled>← 5s</button>
+        <button class="ic-btn" id="fwdBtn"  onclick="seekRel(5)"   disabled>5s →</button>
+      </div>
+      <div class="vdiv"></div>
+      <div class="vc-group">
+        <span class="vc-lbl">Speed</span>
+        <button class="ic-btn" onclick="setSpd(1)"    id="sp1">1×</button>
+        <button class="ic-btn" onclick="setSpd(0.5)"  id="sp05">½×</button>
+        <button class="ic-btn" onclick="setSpd(0.25)" id="sp025">¼×</button>
+      </div>
+      <div class="vdiv"></div>
+      <div class="vc-group">
+        <span class="vc-lbl">Frame</span>
+        <button class="ic-btn" onclick="stepFrame(-1)" id="fbwdBtn" disabled>◀◀</button>
+        <button class="ic-btn" onclick="stepFrame(1)"  id="ffwdBtn" disabled>▶▶</button>
+      </div>
+    </div>
+
+    <div class="scrubber-row" id="scrubberRow" style="display:none">
+      <input type="range" class="scrubber" id="scrubber" min="0" max="100" step="0.01" value="0" oninput="onScrub(this.value)" />
+      <span class="time-lbl" id="timeLbl">0:00 / 0:00</span>
+    </div>
+  </div>
+
+  <!-- Right: controls -->
+  <div class="ctrl-panel">
+
+    <!-- Mode -->
+    <div class="card">
+      <div class="card-lbl">Mode</div>
+      <div class="mode-toggle">
+        <button class="mode-btn on" id="modeWatch" onclick="setMode('watch')">Watch &amp; Detect</button>
+        <button class="mode-btn"    id="modeDraw"  onclick="setMode('draw')">Draw Lines</button>
+      </div>
+      <div class="status info" id="modeHint">Switch to Draw Lines, then drag on the video to place a detection line.</div>
+    </div>
+
+    <!-- Lines -->
+    <div class="card">
+      <div class="card-lbl">Detection Lines</div>
+      <div class="lines-list" id="linesList">
+        <div style="font-size:.75rem;color:var(--muted2)">No lines yet.</div>
+      </div>
+      <div class="add-line-row">
+        <input id="lineNameInput" type="text" placeholder="Label: Finish, 200m to go…" maxlength="30"
+               onkeydown="if(event.key==='Enter') activateDrawMode()" />
+        <button class="btn-add" onclick="activateDrawMode()">Draw</button>
+      </div>
+      <div class="status" id="lineStatus">Type a label, then click Draw — then drag across the video.</div>
+    </div>
+
+    <!-- Race start -->
+    <div class="card">
+      <div class="card-lbl">Race Start Time</div>
+      <div class="start-row">
+        <span class="start-time" id="raceStartLbl">—</span>
+        <button class="btn-sm blue" onclick="setRaceStart()">Set at current frame</button>
+        <button class="btn-sm ghost" onclick="clearRaceStart()">Clear</button>
+      </div>
+      <div class="status" id="startStatus">Seek to race start, then set — gives you elapsed race time in results.</div>
+    </div>
+
+    <!-- Sensitivity -->
+    <div class="card">
+      <div class="card-lbl">Detection Sensitivity</div>
+      <div class="sens-row">
+        <span style="font-size:.7rem;color:var(--muted)">Low</span>
+        <input type="range" id="sensSlider" min="10" max="80" value="35" oninput="onSensChange(this.value)" />
+        <span style="font-size:.7rem;color:var(--muted)">High</span>
+        <span class="sens-val" id="sensVal">35</span>
+      </div>
+      <div class="status">Raise if crossings are missed. Lower if getting false triggers.</div>
+    </div>
+
+    <!-- Results -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 15px 8px;display:flex;align-items:center;justify-content:space-between;">
+        <span class="card-lbl" style="margin:0">Detected Crossings</span>
+        <button class="btn-sm ghost" onclick="clearResults()" style="font-size:.68rem;padding:3px 9px;">Clear</button>
+      </div>
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Line</th>
+            <th>Video Time</th>
+            <th>Race Time</th>
+          </tr>
+        </thead>
+        <tbody id="resultsTbody">
+          <tr><td colspan="3" class="results-empty">No crossings detected yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Shortcuts -->
+    <div class="card">
+      <div class="card-lbl">Keyboard Shortcuts</div>
+      <div class="sc-grid">
+        <div class="sc-row"><span class="kbd">Space</span> Play / Pause</div>
+        <div class="sc-row"><span class="kbd">D</span> Toggle draw mode</div>
+        <div class="sc-row"><span class="kbd">← →</span> Seek ±5s</div>
+        <div class="sc-row"><span class="kbd">, .</span> Step frame</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Hidden video element for decoding -->
+<video id="hiddenVideo" style="display:none" playsinline></video>
+
+<script>
+// ── Constants ────────────────────────────────────────────────────────────────
+const LINE_COLORS = ["#ef4444","#22c55e","#3b82f6","#fbbf24","#a78bfa","#f97316","#06b6d4","#ec4899","#84cc16","#14b8a6"];
+const FRAME = 1 / 25;
+const SAMPLE_N = 50;       // points sampled along each line
+const PX_CHANGE_THRESH = 20; // per-channel diff to count a pixel as "changed"
+const DEBOUNCE_MS = 1200;  // min ms between triggers on same line
+
+// ── State ────────────────────────────────────────────────────────────────────
+const video     = document.getElementById("hiddenVideo");
+const canvas    = document.getElementById("mainCanvas");
+const ctx       = canvas.getContext("2d");
+const offscreen = document.createElement("canvas");
+const offCtx    = offscreen.getContext("2d", { willReadFrequently: true });
+
+let mode        = "watch";
+let lines       = [];       // { id, label, x1,y1,x2,y2, color, lastHit }
+let results     = [];       // { lineId, label, color, videoTime, raceTime }
+let raceStartT  = null;
+let rafId       = null;
+let prevData    = null;
+let pendingLine = null;
+let mouseDown   = false;
+let colorIdx    = 0;
+let sensitivity = 35;
+let scrubbing   = false;
+let videoReady  = false;
+
+// ── Video load ───────────────────────────────────────────────────────────────
+function loadLocalVideo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  video.src = url;
+  video.load();
+  video.onloadedmetadata = onVideoReady;
+}
+
+function onVideoReady() {
+  videoReady = true;
+  canvas.width  = video.videoWidth  || 1280;
+  canvas.height = video.videoHeight || 720;
+  offscreen.width  = canvas.width;
+  offscreen.height = canvas.height;
+
+  document.getElementById("placeholder").style.display = "none";
+  canvas.style.display = "block";
+  document.getElementById("vcBar").style.display = "flex";
+  document.getElementById("scrubberRow").style.display = "flex";
+  document.getElementById("scrubber").max = video.duration;
+
+  ["playBtn","bwdBtn","fwdBtn","fbwdBtn","ffwdBtn"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = false;
+  });
+
+  renderFrame();
+  setLineStatus("Video loaded. Type a label and click Draw, then drag across the video.", "ok");
+}
+
+// ── Playback ─────────────────────────────────────────────────────────────────
+function togglePlay() {
+  if (!videoReady) return;
+  if (video.paused) { video.play(); startLoop(); }
+  else              { video.pause(); stopLoop(); renderFrame(); }
+  updatePlayBtn();
+}
+
+function updatePlayBtn() {
+  document.getElementById("playBtn").innerHTML = video.paused ? "▶ Play" : "⏸ Pause";
+}
+
+function seekRel(s) {
+  if (!videoReady) return;
+  video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + s));
+  renderFrame();
+}
+
+function setSpd(r) { video.playbackRate = r; }
+
+function stepFrame(d) {
+  if (!videoReady) return;
+  if (!video.paused) { video.pause(); stopLoop(); updatePlayBtn(); }
+  video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + d * FRAME));
+  renderFrame();
+}
+
+function onScrub(v) {
+  if (!videoReady) return;
+  scrubbing = true;
+  video.currentTime = parseFloat(v);
+  renderFrame();
+  setTimeout(() => { scrubbing = false; }, 300);
+}
+
+function updateScrubber() {
+  if (!scrubbing) document.getElementById("scrubber").value = video.currentTime;
+  document.getElementById("timeLbl").textContent = fmtT(video.currentTime) + " / " + fmtT(video.duration);
+}
+
+video.addEventListener("ended", () => { stopLoop(); updatePlayBtn(); });
+video.addEventListener("pause", () => { updatePlayBtn(); });
+
+// ── Render loop ──────────────────────────────────────────────────────────────
+function startLoop() { if (!rafId) rafId = requestAnimationFrame(loop); }
+function stopLoop()  { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } prevData = null; }
+
+function loop() {
+  if (!video.paused && !video.ended) {
+    detect();
+    renderFrame();
+    updateScrubber();
+    rafId = requestAnimationFrame(loop);
+  } else {
+    rafId = null;
+    renderFrame();
+    updateScrubber();
+  }
+}
+
+function renderFrame() {
+  if (!videoReady || !video.videoWidth) return;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  drawAllLines();
+  if (pendingLine) drawPendingLine();
+}
+
+function drawAllLines() {
+  const now = Date.now();
+  lines.forEach(ln => {
+    const flash = (now - (ln.lastHit || 0)) < 500;
+    ctx.save();
+    ctx.strokeStyle = flash ? "#ffffff" : ln.color;
+    ctx.lineWidth   = flash ? 3.5 : 2;
+    ctx.shadowColor = ln.color;
+    ctx.shadowBlur  = flash ? 16 : 5;
+    ctx.lineCap     = "round";
+    ctx.beginPath();
+    ctx.moveTo(ln.x1, ln.y1);
+    ctx.lineTo(ln.x2, ln.y2);
+    ctx.stroke();
+    // label
+    const mx = (ln.x1 + ln.x2) / 2 + 6;
+    const my = (ln.y1 + ln.y2) / 2 - 5;
+    ctx.shadowBlur = 0;
+    ctx.font = "bold 13px sans-serif";
+    // outline
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    ctx.lineWidth = 3;
+    ctx.shadowBlur = 0;
+    ctx.strokeText(ln.label, mx, my);
+    ctx.fillStyle = flash ? "#ffffff" : ln.color;
+    ctx.fillText(ln.label, mx, my);
+    ctx.restore();
+  });
+}
+
+function drawPendingLine() {
+  const color = LINE_COLORS[colorIdx % LINE_COLORS.length];
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7, 4]);
+  ctx.lineCap = "round";
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.moveTo(pendingLine.x1, pendingLine.y1);
+  ctx.lineTo(pendingLine.x2, pendingLine.y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── Detection ────────────────────────────────────────────────────────────────
+function detect() {
+  if (lines.length === 0) return;
+  offCtx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
+  const curr = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+  if (!prevData) { prevData = curr; return; }
+
+  const now = Date.now();
+  lines.forEach(ln => {
+    if ((now - (ln.lastHit || 0)) < DEBOUNCE_MS) return;
+    const pct = lineDiffPct(curr, prevData, ln);
+    // sensitivity slider 10–80 maps to: higher value = lower required pct
+    // At sensitivity 35 (default): threshold ~30% of pixels must change
+    const required = Math.max(5, 80 - sensitivity);
+    if (pct >= required) {
+      ln.lastHit = now;
+      recordCrossing(ln);
+    }
+  });
+
+  prevData = curr;
+}
+
+function lineDiffPct(curr, prev, ln) {
+  let changed = 0, total = 0;
+  for (let i = 0; i < SAMPLE_N; i++) {
+    const t = i / (SAMPLE_N - 1);
+    const x = Math.round(ln.x1 + t * (ln.x2 - ln.x1));
+    const y = Math.round(ln.y1 + t * (ln.y2 - ln.y1));
+    if (x < 0 || x >= curr.width || y < 0 || y >= curr.height) continue;
+    const idx = (y * curr.width + x) * 4;
+    const dr = Math.abs(curr.data[idx]   - prev.data[idx]);
+    const dg = Math.abs(curr.data[idx+1] - prev.data[idx+1]);
+    const db = Math.abs(curr.data[idx+2] - prev.data[idx+2]);
+    if ((dr + dg + db) / 3 > PX_CHANGE_THRESH) changed++;
+    total++;
+  }
+  return total === 0 ? 0 : (changed / total) * 100;
+}
+
+function recordCrossing(ln) {
+  const vt = video.currentTime;
+  const rt = raceStartT !== null ? Math.max(0, vt - raceStartT) : null;
+  results.push({ lineId: ln.id, label: ln.label, color: ln.color, videoTime: vt, raceTime: rt });
+  renderResults();
+  flashLineItem(ln.id);
+}
+
+// ── Mode ─────────────────────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.getElementById("modeWatch").classList.toggle("on", m === "watch");
+  document.getElementById("modeDraw").classList.toggle("on",  m === "draw");
+  document.getElementById("canvasWrap").classList.toggle("draw", m === "draw");
+  const hint = document.getElementById("modeHint");
+  if (m === "draw") {
+    hint.textContent = "Draw mode: click and drag on the video to place a line. Lines flash when a crossing is detected.";
+    hint.className = "status info";
+  } else {
+    hint.textContent = "Watch & Detect: play the video — crossings are logged automatically.";
+    hint.className = "status";
+  }
+}
+
+function activateDrawMode() {
+  if (!videoReady) { setLineStatus("Load a video first.", "warn"); return; }
+  setMode("draw");
+  setLineStatus("Drag across the video to place the line. Release to confirm.", "info");
+}
+
+// ── Canvas mouse (draw lines) ────────────────────────────────────────────────
+canvas.addEventListener("mousedown", e => {
+  if (mode !== "draw" || !videoReady) return;
+  mouseDown = true;
+  const p = cvCoords(e);
+  pendingLine = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (!mouseDown || !pendingLine) return;
+  const p = cvCoords(e);
+  pendingLine.x2 = p.x;
+  pendingLine.y2 = p.y;
+  renderFrame();
+});
+
+canvas.addEventListener("mouseup", e => {
+  if (!mouseDown) return;
+  mouseDown = false;
+  if (!pendingLine) return;
+  const p = cvCoords(e);
+  pendingLine.x2 = p.x;
+  pendingLine.y2 = p.y;
+  tryFinalizeLine();
+});
+
+canvas.addEventListener("mouseleave", () => {
+  if (mouseDown) { mouseDown = false; tryFinalizeLine(); }
+});
+
+function tryFinalizeLine() {
+  if (!pendingLine) return;
+  const dx = pendingLine.x2 - pendingLine.x1;
+  const dy = pendingLine.y2 - pendingLine.y1;
+  if (Math.sqrt(dx*dx + dy*dy) >= 20) {
+    const label = document.getElementById("lineNameInput").value.trim() || ("Line " + (lines.length + 1));
+    const color = LINE_COLORS[colorIdx % LINE_COLORS.length];
+    colorIdx++;
+    lines.push({ id: Date.now(), label, x1: pendingLine.x1, y1: pendingLine.y1, x2: pendingLine.x2, y2: pendingLine.y2, color, lastHit: 0 });
+    renderLinesList();
+    setLineStatus("\"" + label + "\" added. Switch to Watch & Detect and play.", "ok");
+    document.getElementById("lineNameInput").value = "";
+  }
+  pendingLine = null;
+  renderFrame();
+}
+
+function cvCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvas.width  / rect.width),
+    y: (e.clientY - rect.top)  * (canvas.height / rect.height),
+  };
+}
+
+// ── Lines list ────────────────────────────────────────────────────────────────
+function renderLinesList() {
+  const el = document.getElementById("linesList");
+  el.innerHTML = "";
+  if (lines.length === 0) {
+    el.innerHTML = '<div style="font-size:.75rem;color:var(--muted2)">No lines yet.</div>';
+    return;
+  }
+  lines.forEach(ln => {
+    const item = document.createElement("div");
+    item.className = "line-item";
+    item.id = "li-" + ln.id;
+    item.innerHTML = `
+      <span class="line-dot" style="background:${ln.color}"></span>
+      <span class="line-name">${ln.label}</span>
+      <button class="line-del" onclick="deleteLine(${ln.id})" title="Remove">✕</button>`;
+    el.appendChild(item);
+  });
+}
+
+function deleteLine(id) {
+  lines = lines.filter(l => l.id !== id);
+  renderLinesList();
+  renderFrame();
+}
+
+function flashLineItem(id) {
+  const el = document.getElementById("li-" + id);
+  if (!el) return;
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), 700);
+}
+
+// ── Race start ────────────────────────────────────────────────────────────────
+function setRaceStart() {
+  if (!videoReady) return;
+  raceStartT = video.currentTime;
+  document.getElementById("raceStartLbl").textContent = fmtT(raceStartT);
+  const el = document.getElementById("startStatus");
+  el.textContent = "Race start set at " + fmtT(raceStartT) + ".";
+  el.className = "status ok";
+}
+
+function clearRaceStart() {
+  raceStartT = null;
+  document.getElementById("raceStartLbl").textContent = "—";
+  const el = document.getElementById("startStatus");
+  el.textContent = "Seek to race start, then set — gives you elapsed race time in results.";
+  el.className = "status";
+}
+
+// ── Sensitivity ───────────────────────────────────────────────────────────────
+function onSensChange(v) {
+  sensitivity = parseInt(v);
+  document.getElementById("sensVal").textContent = v;
+}
+
+// ── Results ───────────────────────────────────────────────────────────────────
+function renderResults() {
+  const tbody = document.getElementById("resultsTbody");
+  if (results.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="results-empty">No crossings detected yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = "";
+  [...results].reverse().forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="lbl-dot" style="background:${r.color}"></span>${r.label}</td>
+      <td>${fmtT(r.videoTime)}</td>
+      <td>${r.raceTime !== null ? fmtElapsed(r.raceTime) : "—"}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function clearResults() { results = []; renderResults(); }
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+  if (document.activeElement?.tagName === "INPUT") return;
+  switch (e.key) {
+    case " ":          e.preventDefault(); togglePlay(); break;
+    case "ArrowLeft":  e.preventDefault(); seekRel(-5); break;
+    case "ArrowRight": e.preventDefault(); seekRel(5); break;
+    case ",":          stepFrame(-1); break;
+    case ".":          stepFrame(1);  break;
+    case "d": case "D": setMode(mode === "draw" ? "watch" : "draw"); break;
+  }
+});
+
+// ── Formatters ────────────────────────────────────────────────────────────────
+function fmtT(s) {
+  if (!s || isNaN(s)) return "0:00";
+  const m = Math.floor(s / 60), ss = Math.floor(s % 60);
+  return m + ":" + String(ss).padStart(2, "0");
+}
+function fmtElapsed(sec) {
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60), t = Math.floor((sec % 1) * 10);
+  return m + ":" + String(s).padStart(2, "0") + "." + t;
+}
+function setLineStatus(msg, type) {
+  const el = document.getElementById("lineStatus");
+  el.textContent = msg;
+  el.className = "status" + (type ? " " + type : "");
+}
+</script>
+</body>
+</html>
