@@ -127,6 +127,11 @@
     .km-val { color: var(--blue); font-weight: 700; }
     .spd-val { color: var(--purple); }
 
+    /* Mode toggle */
+    .mode-toggle { display: flex; background: var(--s2); border-radius: 8px; padding: 3px; gap: 3px; margin-bottom: 12px; }
+    .mode-btn { flex: 1; border: none; border-radius: 6px; cursor: pointer; font-size: .76rem; font-weight: 600; padding: 7px; text-align: center; transition: all .15s; background: transparent; color: var(--muted); }
+    .mode-btn.on { background: var(--s1); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+
     /* Shortcuts */
     .sc-card .sc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
     .sc-row { display: flex; align-items: center; gap: 6px; font-size: .7rem; color: var(--muted); }
@@ -182,9 +187,13 @@
   <!-- Controls panel -->
   <div class="ctrl-panel">
 
-    <!-- Race distance -->
+    <!-- Mode + distance -->
     <div class="card">
-      <div class="card-lbl">Race Distance</div>
+      <div class="mode-toggle">
+        <button class="mode-btn on" id="modeRace"  onclick="setMode('race')">Full Race + Splits</button>
+        <button class="mode-btn"    id="modeQuick" onclick="setMode('quick')">Quick Split</button>
+      </div>
+      <div class="card-lbl" id="distLbl">Race Distance</div>
       <div class="dist-grid" id="distGrid"></div>
       <div class="split-preview" id="splitPreview"></div>
     </div>
@@ -197,7 +206,7 @@
         <div class="timer-lbl" id="timerLbl">ready</div>
       </div>
 
-      <div class="mark-row">
+      <div class="mark-row" id="markRow">
         <button class="btn-mark" id="markBtn" onclick="markSplit()" disabled>
           Mark Split <span class="k">M</span>
         </button>
@@ -265,6 +274,18 @@ const RACES = [
 ];
 
 let selectedRace = RACES[8]; // default 2640m
+let currentMode  = "race";  // "race" | "quick"
+
+function setMode(mode) {
+  if (timerRunning) return;
+  currentMode = mode;
+  document.getElementById("modeRace").classList.toggle("on",  mode === "race");
+  document.getElementById("modeQuick").classList.toggle("on", mode === "quick");
+  document.getElementById("distLbl").textContent = mode === "quick" ? "Segment Distance" : "Race Distance";
+  document.getElementById("splitPreview").style.display  = mode === "quick" ? "none" : "";
+  document.getElementById("markRow").style.display       = mode === "quick" ? "none" : "";
+  resetTimer();
+}
 
 // Build race distance buttons
 const distGrid = document.getElementById("distGrid");
@@ -285,6 +306,7 @@ RACES.forEach((r, i) => {
 
 function renderSplitPreview(marksCount) {
   const div = document.getElementById("splitPreview");
+  if (currentMode === "quick") { div.innerHTML = ""; return; }
   div.innerHTML = "";
   if (selectedRace.splits.length === 0) {
     div.innerHTML = '<span class="sp-tag">No intermediate splits</span>';
@@ -403,10 +425,15 @@ function toggleTimer() {
     document.getElementById("startStopBtn").innerHTML = 'Stop <span class="k">S</span>';
     document.getElementById("startStopBtn").className = "btn-go halt";
     document.getElementById("timerDisplay").className = "timer-big run";
-    document.getElementById("markBtn").disabled = selectedRace.splits.length === 0;
     document.getElementById("resultsCard").style.display = "none";
-    renderSplitPreview(0);
-    setStatus("Timing… press M at each pole.");
+    if (currentMode === "race") {
+      document.getElementById("markBtn").disabled = selectedRace.splits.length === 0;
+      renderSplitPreview(0);
+      setStatus("Timing… press M at each pole.");
+    } else {
+      document.getElementById("markBtn").disabled = true;
+      setStatus("Timing segment — press S to stop.");
+    }
     if (player.getPlayerState() === YT.PlayerState.PLAYING) tick();
   } else {
     // STOP
@@ -456,7 +483,8 @@ function resetTimer() {
 
 function updateTimerDisplay(sec) {
   document.getElementById("timerDisplay").textContent = fmtElapsed(sec);
-  document.getElementById("timerLbl").textContent = "elapsed · " + selectedRace.label;
+  document.getElementById("timerLbl").textContent =
+    (currentMode === "quick" ? "segment · " : "elapsed · ") + selectedRace.label;
 }
 
 // ── Results ──────────────────────────────────────────────────────────────────
@@ -468,6 +496,26 @@ function showResults(totalSec) {
 function buildResultsTable(totalSec, finished) {
   const tbody = document.getElementById("resultsTbody");
   tbody.innerHTML = "";
+
+  // Quick mode: single row only
+  if (currentMode === "quick") {
+    const row = document.createElement("tr");
+    row.className = "total";
+    if (finished) {
+      row.innerHTML = `
+        <td><span class="lbl-badge total">${selectedRace.label}</span></td>
+        <td>${fmtElapsed(totalSec)}</td>
+        <td class="km-val">${fmtKm(totalSec / (selectedRace.m / 1000))}</td>
+        <td class="spd-val">${fmtSpd(totalSec, selectedRace.m)}</td>`;
+    } else {
+      row.innerHTML = `
+        <td><span class="lbl-badge total">${selectedRace.label}</span></td>
+        <td>${fmtElapsed(totalSec)}</td>
+        <td class="km-val">—</td><td class="spd-val">—</td>`;
+    }
+    tbody.appendChild(row);
+    return;
+  }
 
   // Full race row (always first)
   const totalRow = document.createElement("tr");
