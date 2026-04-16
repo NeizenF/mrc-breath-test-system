@@ -81,7 +81,7 @@
 
     /* Timer */
     .timer-wrap { text-align: center; padding: 6px 0 4px; }
-    .timer-big { font-size: 3rem; font-weight: 900; font-family: "SF Mono","Courier New",monospace; letter-spacing: .04em; line-height: 1; transition: color .2s; }
+    .timer-big { font-size: 2.5rem; font-weight: 900; font-family: "SF Mono","Courier New",monospace; letter-spacing: .04em; line-height: 1; transition: color .2s; }
     .timer-big.idle { color: var(--muted2); }
     .timer-big.run  { color: var(--green); }
     .timer-big.done { color: var(--text); }
@@ -605,8 +605,8 @@ document.getElementById("urlInput").addEventListener("keydown", e => {
 
 // ── Formatters ───────────────────────────────────────────────────────────────
 function fmtElapsed(sec) {
-  const m = Math.floor(sec / 60), s = Math.floor(sec % 60), t = Math.floor((sec % 1) * 10);
-  return m + ":" + String(s).padStart(2,"0") + "." + t;
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60), ms = Math.floor((sec % 1) * 1000);
+  return m + ":" + String(s).padStart(2,"0") + "." + String(ms).padStart(3,"0");
 }
 function fmtKm(totalSec) {
   const m = Math.floor(totalSec / 60), s = Math.floor(totalSec % 60), t = Math.floor((totalSec % 1) * 10);
