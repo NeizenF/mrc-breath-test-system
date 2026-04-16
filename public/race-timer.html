@@ -7,76 +7,112 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --bg:       #0a0f1e;
+      --surface:  #111827;
+      --surface2: #1f2937;
+      --border:   #1f2937;
+      --border2:  #374151;
+      --text:     #f1f5f9;
+      --muted:    #6b7280;
+      --muted2:   #4b5563;
+      --blue:     #3b82f6;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --orange:   #f97316;
+      --purple:   #a78bfa;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
-      padding: 24px 16px;
     }
 
-    h1 {
-      text-align: center;
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: #94a3b8;
-      margin-bottom: 20px;
-    }
-
-    .container {
-      max-width: 860px;
-      margin: 0 auto;
+    /* ── Top bar ──────────────────────────────────────── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
       display: flex;
-      flex-direction: column;
-      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
-    /* URL input */
+    .topbar-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
     .url-row {
       display: flex;
       gap: 8px;
+      flex: 1;
+      max-width: 520px;
     }
 
     .url-row input {
       flex: 1;
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 8px;
-      color: #e2e8f0;
-      font-size: 0.875rem;
-      padding: 10px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      color: var(--text);
+      font-size: 0.82rem;
+      padding: 8px 12px;
       outline: none;
       transition: border-color 0.15s;
     }
-    .url-row input:focus { border-color: #60a5fa; }
-    .url-row input::placeholder { color: #475569; }
+    .url-row input:focus { border-color: var(--blue); }
+    .url-row input::placeholder { color: var(--muted2); }
 
-    .btn-load {
-      background: #2563eb;
+    .btn-sm {
+      background: var(--blue);
       border: none;
-      border-radius: 8px;
+      border-radius: 7px;
       color: white;
       cursor: pointer;
-      font-size: 0.875rem;
+      font-size: 0.82rem;
       font-weight: 600;
-      padding: 10px 20px;
-      transition: background 0.15s;
+      padding: 8px 16px;
       white-space: nowrap;
+      transition: opacity 0.15s;
     }
-    .btn-load:hover { background: #1d4ed8; }
+    .btn-sm:hover { opacity: 0.85; }
 
-    /* Video */
+    /* ── Main layout ──────────────────────────────────── */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      padding: 16px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 1000px) {
+      .main { grid-template-columns: 1fr 380px; align-items: start; }
+    }
+
+    /* ── Video panel ──────────────────────────────────── */
+    .video-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
     .video-wrap {
       position: relative;
       padding-bottom: 56.25%;
       background: #000;
       border-radius: 10px;
       overflow: hidden;
-      display: none;
     }
-    .video-wrap.visible { display: block; }
     .video-wrap iframe {
       position: absolute;
       top: 0; left: 0;
@@ -84,249 +120,409 @@
       border: none;
     }
 
-    /* Controls card */
-    .controls {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 20px;
+    .video-placeholder {
+      aspect-ratio: 16/9;
+      background: var(--surface);
+      border: 2px dashed var(--border2);
+      border-radius: 10px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--muted2);
     }
+    .video-placeholder svg { width: 40px; height: 40px; opacity: 0.4; }
+    .video-placeholder p { font-size: 0.85rem; }
 
-    /* Segment selector */
-    .segment-label {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #64748b;
-      margin-bottom: 8px;
-    }
-
-    .segment-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .seg-btn {
-      background: #0f172a;
-      border: 1px solid #334155;
-      border-radius: 6px;
-      color: #94a3b8;
-      cursor: pointer;
-      font-size: 0.8rem;
-      font-weight: 600;
-      padding: 6px 14px;
-      transition: all 0.12s;
-    }
-    .seg-btn:hover { border-color: #60a5fa; color: #e2e8f0; }
-    .seg-btn.active {
-      background: #1d4ed8;
-      border-color: #2563eb;
-      color: white;
-    }
-
-    /* Timer display */
-    .timer-display {
-      text-align: center;
-      padding: 16px 0 8px;
-    }
-
-    .timer-elapsed {
-      font-size: 3.5rem;
-      font-weight: 900;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: 0.02em;
-      color: #f1f5f9;
-      font-family: "Courier New", monospace;
-      line-height: 1;
-    }
-
-    .timer-elapsed.running { color: #4ade80; }
-    .timer-elapsed.stopped { color: #f1f5f9; }
-
-    .timer-sub {
-      font-size: 0.75rem;
-      color: #475569;
-      margin-top: 6px;
-      letter-spacing: 0.05em;
-    }
-
-    /* Results */
-    .results {
-      display: none;
-      gap: 12px;
-    }
-    .results.visible {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .result-card {
-      background: #0f172a;
-      border: 1px solid #334155;
+    /* Video controls bar */
+    .video-controls {
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 14px 16px;
-      text-align: center;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
-    .result-label {
+    .vc-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .vc-label {
       font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: #475569;
-      margin-bottom: 6px;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-right: 4px;
     }
 
-    .result-value {
-      font-size: 1.8rem;
-      font-weight: 800;
-      font-family: "Courier New", monospace;
-      color: #f8fafc;
-      letter-spacing: 0.03em;
-    }
-
-    .result-value.km-time { color: #60a5fa; }
-    .result-value.speed   { color: #a78bfa; }
-
-    /* Action buttons */
-    .action-row {
-      display: flex;
-      gap: 10px;
-    }
-
-    .btn-start-stop {
-      flex: 1;
-      border: none;
-      border-radius: 8px;
+    .icon-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--text);
       cursor: pointer;
-      font-size: 1rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 5px 10px;
+      transition: all 0.12s;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .icon-btn:hover { background: var(--border2); }
+    .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .icon-btn .key {
+      background: var(--bg);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      font-size: 0.65rem;
+      padding: 1px 4px;
+      color: var(--muted);
+      font-family: monospace;
+    }
+
+    .speed-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.75rem;
       font-weight: 700;
-      padding: 14px;
-      letter-spacing: 0.03em;
+      padding: 5px 9px;
+      transition: all 0.12s;
+    }
+    .speed-btn:hover { border-color: var(--blue); color: var(--text); }
+    .speed-btn.active {
+      background: #1d3a6e;
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .divider { width: 1px; height: 24px; background: var(--border2); margin: 0 4px; }
+
+    /* ── Controls panel ───────────────────────────────── */
+    .controls-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .card-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    /* Segment grid */
+    .segment-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
+    }
+
+    .seg-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 7px 4px;
+      text-align: center;
+      transition: all 0.12s;
+    }
+    .seg-btn:hover { border-color: var(--blue); color: var(--text); }
+    .seg-btn.active {
+      background: #1d3a6e;
+      border-color: var(--blue);
+      color: #93c5fd;
+    }
+
+    /* Timer display */
+    .timer-wrap {
+      text-align: center;
+      padding: 8px 0;
+    }
+
+    .timer-big {
+      font-size: 3.2rem;
+      font-weight: 900;
+      font-family: "SF Mono", "Courier New", monospace;
+      letter-spacing: 0.04em;
+      line-height: 1;
+      color: var(--muted2);
+      transition: color 0.2s;
+    }
+    .timer-big.idle    { color: var(--muted2); }
+    .timer-big.running { color: var(--green); }
+    .timer-big.done    { color: var(--text); }
+
+    .timer-label { font-size: 0.7rem; color: var(--muted); margin-top: 4px; letter-spacing: 0.05em; }
+
+    /* Results */
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .result-box {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 12px 10px;
+      text-align: center;
+    }
+
+    .result-box .rl { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 5px; }
+    .result-box .rv { font-size: 1.55rem; font-weight: 800; font-family: "SF Mono", "Courier New", monospace; }
+    .rv.km  { color: var(--blue); }
+    .rv.spd { color: var(--purple); }
+
+    /* Main action buttons */
+    .action-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .btn-main {
+      border: none;
+      border-radius: 9px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 700;
+      padding: 13px;
       transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      letter-spacing: 0.02em;
     }
-    .btn-start-stop.start {
-      background: #16a34a;
-      color: white;
-    }
-    .btn-start-stop.start:hover { background: #15803d; }
-    .btn-start-stop.stop {
-      background: #dc2626;
-      color: white;
-    }
-    .btn-start-stop.stop:hover { background: #b91c1c; }
-    .btn-start-stop:disabled {
-      background: #1e293b;
-      color: #334155;
-      cursor: not-allowed;
-    }
+    .btn-main .key { font-size: 0.7rem; background: rgba(0,0,0,0.25); border-radius: 4px; padding: 2px 6px; font-family: monospace; }
+    .btn-main.go   { background: var(--green); color: #052e16; }
+    .btn-main.go:hover { background: #16a34a; }
+    .btn-main.halt { background: var(--red); color: white; }
+    .btn-main.halt:hover { background: #dc2626; }
+    .btn-main:disabled { background: var(--surface2); color: var(--muted2); cursor: not-allowed; }
 
     .btn-reset {
-      background: #334155;
-      border: none;
-      border-radius: 8px;
-      color: #94a3b8;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 9px;
+      color: var(--muted);
       cursor: pointer;
-      font-size: 0.9rem;
+      font-size: 0.82rem;
       font-weight: 600;
-      padding: 14px 24px;
+      padding: 13px 16px;
       transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
     }
-    .btn-reset:hover { background: #475569; color: #e2e8f0; }
+    .btn-reset:hover { background: var(--border2); color: var(--text); }
+    .btn-reset .key { font-size: 0.65rem; background: var(--bg); border: 1px solid var(--border2); border-radius: 3px; padding: 1px 4px; font-family: monospace; color: var(--muted); }
 
     /* Status */
-    .status {
-      text-align: center;
-      font-size: 0.75rem;
-      color: #475569;
-      min-height: 18px;
-    }
+    .status { text-align: center; font-size: 0.72rem; color: var(--muted); min-height: 16px; }
     .status.warn { color: #f59e0b; }
-    .status.ok   { color: #4ade80; }
+    .status.ok   { color: var(--green); }
 
-    .no-video-hint {
-      text-align: center;
-      color: #334155;
-      font-size: 0.875rem;
-      padding: 40px 0;
+    /* Shortcuts legend */
+    .shortcuts {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .shortcut-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px 12px;
+    }
+
+    .sc-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .kbd {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-bottom: 2px solid var(--border2);
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.68rem;
+      padding: 2px 6px;
+      color: var(--text);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
   </style>
 </head>
 <body>
 
-<div class="container">
-  <h1>Harness Racing Video Timer</h1>
-
-  <!-- URL input -->
+<!-- Top bar -->
+<div class="topbar">
+  <span class="topbar-title">Racing Video Timer</span>
   <div class="url-row">
-    <input id="urlInput" type="text" placeholder="Paste YouTube URL…" />
-    <button class="btn-load" onclick="loadVideo()">Load</button>
-  </div>
-
-  <!-- Video -->
-  <div class="video-wrap" id="videoWrap">
-    <div id="ytPlayer"></div>
-  </div>
-
-  <div class="no-video-hint" id="noVideoHint">Paste a YouTube URL above to get started.</div>
-
-  <!-- Controls -->
-  <div class="controls">
-
-    <div>
-      <div class="segment-label">Segment Distance</div>
-      <div class="segment-grid" id="segmentGrid">
-        <!-- populated by JS -->
-      </div>
-    </div>
-
-    <div class="timer-display">
-      <div class="timer-elapsed stopped" id="timerDisplay">0:00.0</div>
-      <div class="timer-sub" id="timerSub">elapsed video time</div>
-    </div>
-
-    <div class="results" id="results">
-      <div class="result-card">
-        <div class="result-label">Kilometre Time</div>
-        <div class="result-value km-time" id="kmTimeDisplay">—</div>
-      </div>
-      <div class="result-card">
-        <div class="result-label">Speed</div>
-        <div class="result-value speed" id="speedDisplay">—</div>
-      </div>
-    </div>
-
-    <div class="action-row">
-      <button class="btn-start-stop start" id="startStopBtn" onclick="toggleTimer()" disabled>Start</button>
-      <button class="btn-reset" onclick="resetTimer()">Reset</button>
-    </div>
-
-    <div class="status" id="statusMsg"></div>
+    <input id="urlInput" type="text" placeholder="Paste YouTube URL and press Enter…" />
+    <button class="btn-sm" onclick="loadVideo()">Load</button>
   </div>
 </div>
 
-<!-- YouTube IFrame API -->
+<!-- Main -->
+<div class="main">
+
+  <!-- Left: video + controls -->
+  <div class="video-panel">
+
+    <div id="videoWrap" class="video-wrap" style="display:none">
+      <div id="ytPlayer"></div>
+    </div>
+
+    <div id="videoPlaceholder" class="video-placeholder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/>
+      </svg>
+      <p>Paste a YouTube URL above to load a video</p>
+    </div>
+
+    <!-- Video controls bar -->
+    <div class="video-controls">
+      <!-- Frame step -->
+      <div class="vc-group">
+        <span class="vc-label">Frame</span>
+        <button class="icon-btn" id="frameBwdBtn" onclick="stepFrame(-1)" disabled>
+          ◀◀ <span class="key">,</span>
+        </button>
+        <button class="icon-btn" id="playPauseBtn" onclick="togglePlayPause()" disabled>
+          ▶ Play <span class="key">Space</span>
+        </button>
+        <button class="icon-btn" id="frameFwdBtn" onclick="stepFrame(1)" disabled>
+          ▶▶ <span class="key">.</span>
+        </button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Seek -->
+      <div class="vc-group">
+        <span class="vc-label">Seek</span>
+        <button class="icon-btn" onclick="seekRel(-5)" id="seekBwdBtn" disabled>← 5s</button>
+        <button class="icon-btn" onclick="seekRel(5)" id="seekFwdBtn" disabled>5s →</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Speed -->
+      <div class="vc-group">
+        <span class="vc-label">Speed</span>
+        <button class="speed-btn active" data-speed="1"   onclick="setSpeed(1)"    id="sp1">1×</button>
+        <button class="speed-btn"        data-speed="0.75" onclick="setSpeed(0.75)" id="sp075">¾×</button>
+        <button class="speed-btn"        data-speed="0.5"  onclick="setSpeed(0.5)"  id="sp05">½×</button>
+        <button class="speed-btn"        data-speed="0.25" onclick="setSpeed(0.25)" id="sp025">¼×</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: timer controls -->
+  <div class="controls-panel">
+
+    <!-- Segment selector -->
+    <div class="card">
+      <div class="card-label">Segment Distance</div>
+      <div class="segment-grid" id="segmentGrid"></div>
+    </div>
+
+    <!-- Timer -->
+    <div class="card">
+      <div class="card-label">Elapsed Time</div>
+      <div class="timer-wrap">
+        <div class="timer-big idle" id="timerDisplay">0:00.0</div>
+        <div class="timer-label" id="timerSub">ready</div>
+      </div>
+
+      <div class="results-grid" id="resultsGrid" style="display:none">
+        <div class="result-box">
+          <div class="rl">Km Time</div>
+          <div class="rv km" id="kmDisplay">—</div>
+        </div>
+        <div class="result-box">
+          <div class="rl">Speed</div>
+          <div class="rv spd" id="spdDisplay">—</div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px" class="action-row">
+        <button class="btn-main go" id="startStopBtn" onclick="toggleTimer()" disabled>
+          Start <span class="key">S</span>
+        </button>
+        <button class="btn-reset" onclick="resetTimer()">
+          Reset <span class="key">R</span>
+        </button>
+      </div>
+
+      <div class="status" id="statusMsg" style="margin-top:8px"></div>
+    </div>
+
+    <!-- Shortcuts -->
+    <div class="shortcuts">
+      <div class="card-label">Keyboard Shortcuts</div>
+      <div class="shortcut-grid">
+        <div class="sc-row"><span class="kbd">Space</span> Play / Pause</div>
+        <div class="sc-row"><span class="kbd">S</span> Start / Stop timer</div>
+        <div class="sc-row"><span class="kbd">,</span> Step back 1 frame</div>
+        <div class="sc-row"><span class="kbd">.</span> Step forward 1 frame</div>
+        <div class="sc-row"><span class="kbd">← →</span> Seek ±5 seconds</div>
+        <div class="sc-row"><span class="kbd">R</span> Reset timer</div>
+        <div class="sc-row"><span class="kbd">1</span> Speed 1×</div>
+        <div class="sc-row"><span class="kbd">2</span> Speed ¾×</div>
+        <div class="sc-row"><span class="kbd">3</span> Speed ½×</div>
+        <div class="sc-row"><span class="kbd">4</span> Speed ¼×</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
-  // ── Segments ─────────────────────────────────────────────────────────────
+  // ── Segments ──────────────────────────────────────────────────────────────
   const SEGMENTS = [
-    { label: "1640m", m: 1640 },
-    { label: "2140m", m: 2140 },
-    { label: "2640m", m: 2640 },
-    { label: "3000m", m: 3000 },
-    { label: "200m",  m: 200  },
-    { label: "300m",  m: 300  },
-    { label: "500m",  m: 500  },
-    { label: "1000m", m: 1000 },
-    { label: "1200m", m: 1200 },
-    { label: "1500m", m: 1500 },
+    { label:"1640m", m:1640 }, { label:"2140m", m:2140 },
+    { label:"2640m", m:2640 }, { label:"3000m", m:3000 },
+    { label:"200m",  m:200  }, { label:"300m",  m:300  },
+    { label:"500m",  m:500  }, { label:"1000m", m:1000 },
+    { label:"1200m", m:1200 }, { label:"1500m", m:1500 },
   ];
-
   let selectedSegment = SEGMENTS[0];
 
   const grid = document.getElementById("segmentGrid");
@@ -338,51 +534,34 @@
       document.querySelectorAll(".seg-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       selectedSegment = seg;
-      if (!timerRunning) updateResults();
+      if (!timerRunning) refreshResults();
     };
     grid.appendChild(btn);
   });
 
   // ── YouTube Player ────────────────────────────────────────────────────────
-  let player = null;
-  let playerReady = false;
+  let player = null, playerReady = false;
+  const FRAME = 1 / 25; // ~25fps step in seconds
 
   function extractVideoId(url) {
-    url = url.trim();
-    const patterns = [
-      /[?&]v=([^&#]+)/,
-      /youtu\.be\/([^?&#]+)/,
-      /\/embed\/([^?&#]+)/,
-      /\/v\/([^?&#]+)/,
-    ];
-    for (const p of patterns) {
-      const m = url.match(p);
-      if (m) return m[1];
-    }
+    const pats = [/[?&]v=([^&#]+)/, /youtu\.be\/([^?&#]+)/, /\/embed\/([^?&#]+)/];
+    for (const p of pats) { const m = url.trim().match(p); if (m) return m[1]; }
     return null;
   }
 
   function loadVideo() {
-    const url = document.getElementById("urlInput").value;
-    const id = extractVideoId(url);
-    if (!id) {
-      setStatus("Could not find a YouTube video ID in that URL.", "warn");
-      return;
-    }
+    const id = extractVideoId(document.getElementById("urlInput").value);
+    if (!id) { setStatus("Could not find a YouTube video ID.", "warn"); return; }
     resetTimer();
-    document.getElementById("noVideoHint").style.display = "none";
-    document.getElementById("videoWrap").classList.add("visible");
-
+    document.getElementById("videoPlaceholder").style.display = "none";
+    document.getElementById("videoWrap").style.display = "block";
     if (player && playerReady) {
       player.loadVideoById(id);
     } else {
       player = new YT.Player("ytPlayer", {
         videoId: id,
         playerVars: { rel: 0, modestbranding: 1 },
-        events: {
-          onReady: onPlayerReady,
-          onStateChange: onPlayerStateChange,
-        },
+        events: { onReady: onPlayerReady, onStateChange: onPlayerStateChange },
       });
     }
     setStatus("");
@@ -390,159 +569,198 @@
 
   function onPlayerReady() {
     playerReady = true;
-    document.getElementById("startStopBtn").disabled = false;
-    setStatus("Video ready. Select a segment and press Start.", "ok");
+    enableControls(true);
+    setStatus("Video ready — select segment and press S to start.", "ok");
+    updatePlayBtn();
   }
 
-  // ── Timer state ───────────────────────────────────────────────────────────
-  let timerRunning  = false;
-  let startVideoTime = null;   // player time when Start was pressed
-  let lastVideoTime  = null;   // player time at last poll (for seek detection)
+  function enableControls(on) {
+    ["startStopBtn","frameBwdBtn","frameFwdBtn","playPauseBtn","seekBwdBtn","seekFwdBtn"]
+      .forEach(id => { const el = document.getElementById(id); if (el) el.disabled = !on; });
+  }
+
+  function updatePlayBtn() {
+    if (!player || !playerReady) return;
+    const playing = player.getPlayerState() === YT.PlayerState.PLAYING;
+    const btn = document.getElementById("playPauseBtn");
+    btn.innerHTML = playing
+      ? '⏸ Pause <span class="key">Space</span>'
+      : '▶ Play <span class="key">Space</span>';
+  }
+
+  // ── Timer ─────────────────────────────────────────────────────────────────
+  let timerRunning   = false;
+  let startVideoTime = null;
+  let lastVideoTime  = null;
   let rafId          = null;
 
-  function onPlayerStateChange(event) {
-    const state = event.data;
-    if (state === YT.PlayerState.PLAYING) {
-      if (timerRunning) {
-        lastVideoTime = player.getCurrentTime();
-        tick();
-      }
-    } else if (
-      state === YT.PlayerState.PAUSED ||
-      state === YT.PlayerState.ENDED ||
-      state === YT.PlayerState.BUFFERING
-    ) {
-      if (timerRunning) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-        // Update display with current elapsed
-        const el = getElapsed();
-        updateTimerDisplay(el, true);
-      }
+  function onPlayerStateChange(e) {
+    updatePlayBtn();
+    const s = e.data;
+    if (s === YT.PlayerState.PLAYING) {
+      if (timerRunning) { lastVideoTime = player.getCurrentTime(); tick(); }
+    } else if (s === YT.PlayerState.PAUSED || s === YT.PlayerState.ENDED || s === YT.PlayerState.BUFFERING) {
+      cancelAnimationFrame(rafId); rafId = null;
+      if (timerRunning) updateTimerDisplay(getElapsed());
     }
   }
 
   function getElapsed() {
     if (startVideoTime === null || !player) return 0;
-    const cur = player.getCurrentTime();
-    return Math.max(0, cur - startVideoTime);
+    return Math.max(0, player.getCurrentTime() - startVideoTime);
   }
 
   function tick() {
     if (!timerRunning || !player) return;
-
-    const state = player.getPlayerState();
-    if (state !== YT.PlayerState.PLAYING) return;
-
+    if (player.getPlayerState() !== YT.PlayerState.PLAYING) return;
     const cur = player.getCurrentTime();
-
-    // Seek detection: if player time jumped more than 0.5s away from expected
-    if (lastVideoTime !== null) {
-      const drift = Math.abs(cur - (lastVideoTime + 0.1));
-      if (drift > 1.0) {
-        // User seeked — adjust startVideoTime so elapsed stays logical
-        // We keep elapsed at its current value and shift the start reference
-        const prevElapsed = Math.max(0, lastVideoTime - startVideoTime);
-        startVideoTime = cur - prevElapsed;
-      }
+    // Seek detection
+    if (lastVideoTime !== null && Math.abs(cur - (lastVideoTime + 0.1)) > 1.0) {
+      const prev = Math.max(0, lastVideoTime - startVideoTime);
+      startVideoTime = cur - prev;
     }
     lastVideoTime = cur;
-
-    const elapsed = getElapsed();
-    updateTimerDisplay(elapsed, true);
+    updateTimerDisplay(getElapsed());
     rafId = requestAnimationFrame(tick);
   }
 
   function toggleTimer() {
     if (!playerReady || !player) return;
-
     if (!timerRunning) {
-      // START
       timerRunning = true;
       startVideoTime = player.getCurrentTime();
       lastVideoTime  = startVideoTime;
-
-      document.getElementById("startStopBtn").textContent = "Stop";
-      document.getElementById("startStopBtn").className = "btn-start-stop stop";
-      document.getElementById("timerDisplay").className = "timer-elapsed running";
-      document.getElementById("results").classList.remove("visible");
+      document.getElementById("startStopBtn").innerHTML = 'Stop <span class="key">S</span>';
+      document.getElementById("startStopBtn").className = "btn-main halt";
+      document.getElementById("timerDisplay").className = "timer-big running";
+      document.getElementById("resultsGrid").style.display = "none";
       setStatus("Timing…");
-
-      if (player.getPlayerState() === YT.PlayerState.PLAYING) {
-        tick();
-      }
+      if (player.getPlayerState() === YT.PlayerState.PLAYING) tick();
     } else {
-      // STOP
-      cancelAnimationFrame(rafId);
-      rafId = null;
+      cancelAnimationFrame(rafId); rafId = null;
       timerRunning = false;
-
-      const elapsed = getElapsed();
-      updateTimerDisplay(elapsed, false);
-      showResults(elapsed);
-
-      document.getElementById("startStopBtn").textContent = "Start";
-      document.getElementById("startStopBtn").className = "btn-start-stop start";
-      document.getElementById("timerDisplay").className = "timer-elapsed stopped";
-      setStatus("Stopped. Results below.");
+      const el = getElapsed();
+      updateTimerDisplay(el);
+      showResults(el);
+      document.getElementById("startStopBtn").innerHTML = 'Start <span class="key">S</span>';
+      document.getElementById("startStopBtn").className = "btn-main go";
+      document.getElementById("timerDisplay").className = "timer-big done";
+      setStatus("Stopped.");
     }
   }
 
   function resetTimer() {
-    cancelAnimationFrame(rafId);
-    rafId = null;
-    timerRunning   = false;
-    startVideoTime = null;
-    lastVideoTime  = null;
-
-    updateTimerDisplay(0, false);
-    document.getElementById("results").classList.remove("visible");
-    document.getElementById("startStopBtn").textContent = "Start";
-    document.getElementById("startStopBtn").className = "btn-start-stop start";
-    document.getElementById("timerDisplay").className = "timer-elapsed stopped";
+    cancelAnimationFrame(rafId); rafId = null;
+    timerRunning = false; startVideoTime = null; lastVideoTime = null;
+    document.getElementById("timerDisplay").textContent = "0:00.0";
+    document.getElementById("timerDisplay").className = "timer-big idle";
+    document.getElementById("resultsGrid").style.display = "none";
+    document.getElementById("timerSub").textContent = "ready";
+    document.getElementById("startStopBtn").innerHTML = 'Start <span class="key">S</span>';
+    document.getElementById("startStopBtn").className = "btn-main go";
     setStatus("");
   }
 
-  // ── Display helpers ───────────────────────────────────────────────────────
-
-  function formatElapsed(sec) {
-    const m   = Math.floor(sec / 60);
-    const s   = Math.floor(sec % 60);
-    const t   = Math.floor((sec % 1) * 10);
-    return m + ":" + String(s).padStart(2, "0") + "." + t;
+  function updateTimerDisplay(sec) {
+    document.getElementById("timerDisplay").textContent = fmtElapsed(sec);
+    document.getElementById("timerSub").textContent = "elapsed · " + selectedSegment.label;
+    if (!timerRunning && sec > 0) refreshResults(sec);
   }
 
-  function updateTimerDisplay(sec, running) {
-    document.getElementById("timerDisplay").textContent = formatElapsed(sec);
-    if (!running && sec > 0) updateResults(sec);
-  }
-
-  function updateResults(sec) {
+  function refreshResults(sec) {
     if (sec === undefined) sec = getElapsed();
     if (sec <= 0) return;
-    const distKm = selectedSegment.m / 1000;
-    const kmTimeSec = sec / distKm;
-    document.getElementById("kmTimeDisplay").textContent = formatKmTime(kmTimeSec);
-    document.getElementById("speedDisplay").textContent  = formatSpeed(sec, selectedSegment.m);
-  }
-
-  // Harness racing km time: M.SS,T  (e.g. 1.13,4)
-  function formatKmTime(totalSec) {
-    const m = Math.floor(totalSec / 60);
-    const s = Math.floor(totalSec % 60);
-    const t = Math.floor((totalSec % 1) * 10);
-    return m + "." + String(s).padStart(2, "0") + "," + t;
-  }
-
-  function formatSpeed(elapsedSec, distM) {
-    const kmh = (distM / elapsedSec) * 3.6;
-    return kmh.toFixed(2) + " km/h";
+    document.getElementById("kmDisplay").textContent  = fmtKmTime(sec / (selectedSegment.m / 1000));
+    document.getElementById("spdDisplay").textContent = ((selectedSegment.m / sec) * 3.6).toFixed(2) + " km/h";
   }
 
   function showResults(sec) {
     if (sec <= 0) return;
-    updateResults(sec);
-    document.getElementById("results").classList.add("visible");
+    refreshResults(sec);
+    document.getElementById("resultsGrid").style.display = "grid";
+  }
+
+  // ── Video controls ────────────────────────────────────────────────────────
+  function togglePlayPause() {
+    if (!player || !playerReady) return;
+    if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo();
+    else player.playVideo();
+  }
+
+  function stepFrame(dir) {
+    if (!player || !playerReady) return;
+    player.pauseVideo();
+    const t = player.getCurrentTime();
+    player.seekTo(Math.max(0, t + dir * FRAME), true);
+  }
+
+  function seekRel(sec) {
+    if (!player || !playerReady) return;
+    player.seekTo(Math.max(0, player.getCurrentTime() + sec), true);
+  }
+
+  function setSpeed(rate) {
+    if (player && playerReady) player.setPlaybackRate(rate);
+    document.querySelectorAll(".speed-btn").forEach(b => {
+      b.classList.toggle("active", parseFloat(b.dataset.speed) === rate);
+    });
+  }
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  document.addEventListener("keydown", (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+    switch (e.key) {
+      case " ":
+        e.preventDefault();
+        togglePlayPause();
+        break;
+      case "s": case "S":
+        if (playerReady) toggleTimer();
+        break;
+      case "r": case "R":
+        resetTimer();
+        break;
+      case ",":
+        stepFrame(-1);
+        break;
+      case ".":
+        stepFrame(1);
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        seekRel(-5);
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        seekRel(5);
+        break;
+      case "1": setSpeed(1);    break;
+      case "2": setSpeed(0.75); break;
+      case "3": setSpeed(0.5);  break;
+      case "4": setSpeed(0.25); break;
+    }
+  });
+
+  document.getElementById("urlInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") loadVideo();
+  });
+
+  // ── Formatters ────────────────────────────────────────────────────────────
+  function fmtElapsed(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    const t = Math.floor((sec % 1) * 10);
+    return m + ":" + String(s).padStart(2,"0") + "." + t;
+  }
+
+  // Harness km time: M.SS,T  (e.g. 1.13,4)
+  function fmtKmTime(totalSec) {
+    const m = Math.floor(totalSec / 60);
+    const s = Math.floor(totalSec % 60);
+    const t = Math.floor((totalSec % 1) * 10);
+    return m + "." + String(s).padStart(2,"0") + "," + t;
   }
 
   function setStatus(msg, type) {
@@ -550,11 +768,6 @@
     el.textContent = msg;
     el.className = "status" + (type ? " " + type : "");
   }
-
-  // Allow pressing Enter on URL input
-  document.getElementById("urlInput").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") loadVideo();
-  });
 </script>
 </body>
 </html>
