@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harness Racing Video Timer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* URL input */
+    .url-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .url-row input {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.875rem;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .url-row input:focus { border-color: #60a5fa; }
+    .url-row input::placeholder { color: #475569; }
+
+    .btn-load {
+      background: #2563eb;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 10px 20px;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-load:hover { background: #1d4ed8; }
+
+    /* Video */
+    .video-wrap {
+      position: relative;
+      padding-bottom: 56.25%;
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+      display: none;
+    }
+    .video-wrap.visible { display: block; }
+    .video-wrap iframe {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border: none;
+    }
+
+    /* Controls card */
+    .controls {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Segment selector */
+    .segment-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+
+    .segment-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .seg-btn {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      transition: all 0.12s;
+    }
+    .seg-btn:hover { border-color: #60a5fa; color: #e2e8f0; }
+    .seg-btn.active {
+      background: #1d4ed8;
+      border-color: #2563eb;
+      color: white;
+    }
+
+    /* Timer display */
+    .timer-display {
+      text-align: center;
+      padding: 16px 0 8px;
+    }
+
+    .timer-elapsed {
+      font-size: 3.5rem;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+      color: #f1f5f9;
+      font-family: "Courier New", monospace;
+      line-height: 1;
+    }
+
+    .timer-elapsed.running { color: #4ade80; }
+    .timer-elapsed.stopped { color: #f1f5f9; }
+
+    .timer-sub {
+      font-size: 0.75rem;
+      color: #475569;
+      margin-top: 6px;
+      letter-spacing: 0.05em;
+    }
+
+    /* Results */
+    .results {
+      display: none;
+      gap: 12px;
+    }
+    .results.visible {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .result-card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 14px 16px;
+      text-align: center;
+    }
+
+    .result-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+
+    .result-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      font-family: "Courier New", monospace;
+      color: #f8fafc;
+      letter-spacing: 0.03em;
+    }
+
+    .result-value.km-time { color: #60a5fa; }
+    .result-value.speed   { color: #a78bfa; }
+
+    /* Action buttons */
+    .action-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-start-stop {
+      flex: 1;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 14px;
+      letter-spacing: 0.03em;
+      transition: all 0.15s;
+    }
+    .btn-start-stop.start {
+      background: #16a34a;
+      color: white;
+    }
+    .btn-start-stop.start:hover { background: #15803d; }
+    .btn-start-stop.stop {
+      background: #dc2626;
+      color: white;
+    }
+    .btn-start-stop.stop:hover { background: #b91c1c; }
+    .btn-start-stop:disabled {
+      background: #1e293b;
+      color: #334155;
+      cursor: not-allowed;
+    }
+
+    .btn-reset {
+      background: #334155;
+      border: none;
+      border-radius: 8px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 14px 24px;
+      transition: all 0.15s;
+    }
+    .btn-reset:hover { background: #475569; color: #e2e8f0; }
+
+    /* Status */
+    .status {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #475569;
+      min-height: 18px;
+    }
+    .status.warn { color: #f59e0b; }
+    .status.ok   { color: #4ade80; }
+
+    .no-video-hint {
+      text-align: center;
+      color: #334155;
+      font-size: 0.875rem;
+      padding: 40px 0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Harness Racing Video Timer</h1>
+
+  <!-- URL input -->
+  <div class="url-row">
+    <input id="urlInput" type="text" placeholder="Paste YouTube URL…" />
+    <button class="btn-load" onclick="loadVideo()">Load</button>
+  </div>
+
+  <!-- Video -->
+  <div class="video-wrap" id="videoWrap">
+    <div id="ytPlayer"></div>
+  </div>
+
+  <div class="no-video-hint" id="noVideoHint">Paste a YouTube URL above to get started.</div>
+
+  <!-- Controls -->
+  <div class="controls">
+
+    <div>
+      <div class="segment-label">Segment Distance</div>
+      <div class="segment-grid" id="segmentGrid">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <div class="timer-display">
+      <div class="timer-elapsed stopped" id="timerDisplay">0:00.0</div>
+      <div class="timer-sub" id="timerSub">elapsed video time</div>
+    </div>
+
+    <div class="results" id="results">
+      <div class="result-card">
+        <div class="result-label">Kilometre Time</div>
+        <div class="result-value km-time" id="kmTimeDisplay">—</div>
+      </div>
+      <div class="result-card">
+        <div class="result-label">Speed</div>
+        <div class="result-value speed" id="speedDisplay">—</div>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="btn-start-stop start" id="startStopBtn" onclick="toggleTimer()" disabled>Start</button>
+      <button class="btn-reset" onclick="resetTimer()">Reset</button>
+    </div>
+
+    <div class="status" id="statusMsg"></div>
+  </div>
+</div>
+
+<!-- YouTube IFrame API -->
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+  // ── Segments ─────────────────────────────────────────────────────────────
+  const SEGMENTS = [
+    { label: "1640m", m: 1640 },
+    { label: "2140m", m: 2140 },
+    { label: "2640m", m: 2640 },
+    { label: "3000m", m: 3000 },
+    { label: "200m",  m: 200  },
+    { label: "300m",  m: 300  },
+    { label: "500m",  m: 500  },
+    { label: "1000m", m: 1000 },
+    { label: "1200m", m: 1200 },
+    { label: "1500m", m: 1500 },
+  ];
+
+  let selectedSegment = SEGMENTS[0];
+
+  const grid = document.getElementById("segmentGrid");
+  SEGMENTS.forEach((seg, i) => {
+    const btn = document.createElement("button");
+    btn.className = "seg-btn" + (i === 0 ? " active" : "");
+    btn.textContent = seg.label;
+    btn.onclick = () => {
+      document.querySelectorAll(".seg-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedSegment = seg;
+      if (!timerRunning) updateResults();
+    };
+    grid.appendChild(btn);
+  });
+
+  // ── YouTube Player ────────────────────────────────────────────────────────
+  let player = null;
+  let playerReady = false;
+
+  function extractVideoId(url) {
+    url = url.trim();
+    const patterns = [
+      /[?&]v=([^&#]+)/,
+      /youtu\.be\/([^?&#]+)/,
+      /\/embed\/([^?&#]+)/,
+      /\/v\/([^?&#]+)/,
+    ];
+    for (const p of patterns) {
+      const m = url.match(p);
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  function loadVideo() {
+    const url = document.getElementById("urlInput").value;
+    const id = extractVideoId(url);
+    if (!id) {
+      setStatus("Could not find a YouTube video ID in that URL.", "warn");
+      return;
+    }
+    resetTimer();
+    document.getElementById("noVideoHint").style.display = "none";
+    document.getElementById("videoWrap").classList.add("visible");
+
+    if (player && playerReady) {
+      player.loadVideoById(id);
+    } else {
+      player = new YT.Player("ytPlayer", {
+        videoId: id,
+        playerVars: { rel: 0, modestbranding: 1 },
+        events: {
+          onReady: onPlayerReady,
+          onStateChange: onPlayerStateChange,
+        },
+      });
+    }
+    setStatus("");
+  }
+
+  function onPlayerReady() {
+    playerReady = true;
+    document.getElementById("startStopBtn").disabled = false;
+    setStatus("Video ready. Select a segment and press Start.", "ok");
+  }
+
+  // ── Timer state ───────────────────────────────────────────────────────────
+  let timerRunning  = false;
+  let startVideoTime = null;   // player time when Start was pressed
+  let lastVideoTime  = null;   // player time at last poll (for seek detection)
+  let rafId          = null;
+
+  function onPlayerStateChange(event) {
+    const state = event.data;
+    if (state === YT.PlayerState.PLAYING) {
+      if (timerRunning) {
+        lastVideoTime = player.getCurrentTime();
+        tick();
+      }
+    } else if (
+      state === YT.PlayerState.PAUSED ||
+      state === YT.PlayerState.ENDED ||
+      state === YT.PlayerState.BUFFERING
+    ) {
+      if (timerRunning) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        // Update display with current elapsed
+        const el = getElapsed();
+        updateTimerDisplay(el, true);
+      }
+    }
+  }
+
+  function getElapsed() {
+    if (startVideoTime === null || !player) return 0;
+    const cur = player.getCurrentTime();
+    return Math.max(0, cur - startVideoTime);
+  }
+
+  function tick() {
+    if (!timerRunning || !player) return;
+
+    const state = player.getPlayerState();
+    if (state !== YT.PlayerState.PLAYING) return;
+
+    const cur = player.getCurrentTime();
+
+    // Seek detection: if player time jumped more than 0.5s away from expected
+    if (lastVideoTime !== null) {
+      const drift = Math.abs(cur - (lastVideoTime + 0.1));
+      if (drift > 1.0) {
+        // User seeked — adjust startVideoTime so elapsed stays logical
+        // We keep elapsed at its current value and shift the start reference
+        const prevElapsed = Math.max(0, lastVideoTime - startVideoTime);
+        startVideoTime = cur - prevElapsed;
+      }
+    }
+    lastVideoTime = cur;
+
+    const elapsed = getElapsed();
+    updateTimerDisplay(elapsed, true);
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function toggleTimer() {
+    if (!playerReady || !player) return;
+
+    if (!timerRunning) {
+      // START
+      timerRunning = true;
+      startVideoTime = player.getCurrentTime();
+      lastVideoTime  = startVideoTime;
+
+      document.getElementById("startStopBtn").textContent = "Stop";
+      document.getElementById("startStopBtn").className = "btn-start-stop stop";
+      document.getElementById("timerDisplay").className = "timer-elapsed running";
+      document.getElementById("results").classList.remove("visible");
+      setStatus("Timing…");
+
+      if (player.getPlayerState() === YT.PlayerState.PLAYING) {
+        tick();
+      }
+    } else {
+      // STOP
+      cancelAnimationFrame(rafId);
+      rafId = null;
+      timerRunning = false;
+
+      const elapsed = getElapsed();
+      updateTimerDisplay(elapsed, false);
+      showResults(elapsed);
+
+      document.getElementById("startStopBtn").textContent = "Start";
+      document.getElementById("startStopBtn").className = "btn-start-stop start";
+      document.getElementById("timerDisplay").className = "timer-elapsed stopped";
+      setStatus("Stopped. Results below.");
+    }
+  }
+
+  function resetTimer() {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+    timerRunning   = false;
+    startVideoTime = null;
+    lastVideoTime  = null;
+
+    updateTimerDisplay(0, false);
+    document.getElementById("results").classList.remove("visible");
+    document.getElementById("startStopBtn").textContent = "Start";
+    document.getElementById("startStopBtn").className = "btn-start-stop start";
+    document.getElementById("timerDisplay").className = "timer-elapsed stopped";
+    setStatus("");
+  }
+
+  // ── Display helpers ───────────────────────────────────────────────────────
+
+  function formatElapsed(sec) {
+    const m   = Math.floor(sec / 60);
+    const s   = Math.floor(sec % 60);
+    const t   = Math.floor((sec % 1) * 10);
+    return m + ":" + String(s).padStart(2, "0") + "." + t;
+  }
+
+  function updateTimerDisplay(sec, running) {
+    document.getElementById("timerDisplay").textContent = formatElapsed(sec);
+    if (!running && sec > 0) updateResults(sec);
+  }
+
+  function updateResults(sec) {
+    if (sec === undefined) sec = getElapsed();
+    if (sec <= 0) return;
+    const distKm = selectedSegment.m / 1000;
+    const kmTimeSec = sec / distKm;
+    document.getElementById("kmTimeDisplay").textContent = formatKmTime(kmTimeSec);
+    document.getElementById("speedDisplay").textContent  = formatSpeed(sec, selectedSegment.m);
+  }
+
+  // Harness racing km time: M.SS,T  (e.g. 1.13,4)
+  function formatKmTime(totalSec) {
+    const m = Math.floor(totalSec / 60);
+    const s = Math.floor(totalSec % 60);
+    const t = Math.floor((totalSec % 1) * 10);
+    return m + "." + String(s).padStart(2, "0") + "," + t;
+  }
+
+  function formatSpeed(elapsedSec, distM) {
+    const kmh = (distM / elapsedSec) * 3.6;
+    return kmh.toFixed(2) + " km/h";
+  }
+
+  function showResults(sec) {
+    if (sec <= 0) return;
+    updateResults(sec);
+    document.getElementById("results").classList.add("visible");
+  }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById("statusMsg");
+    el.textContent = msg;
+    el.className = "status" + (type ? " " + type : "");
+  }
+
+  // Allow pressing Enter on URL input
+  document.getElementById("urlInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") loadVideo();
+  });
+</script>
+</body>
+</html>
