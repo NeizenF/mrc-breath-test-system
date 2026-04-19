@@ -823,8 +823,10 @@ export default function RaceDayPage() {
     try {
       const { data: m } = await supabase
         .from("meetings").select("import_urls").eq("id", meetingId).single();
-      const urls = ((m as { import_urls: string | null })?.import_urls ?? "")
-        .split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+      const fromDb = (m as { import_urls: string | null })?.import_urls ?? "";
+      const fromLocal = localStorage.getItem(`bulk-mrc-urls-${meetingId}`) ?? "";
+      const raw = fromDb || fromLocal;
+      const urls = raw.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
       if (urls.length === 0) {
         toast.error("No saved links for this meeting. Add them on the Import page first.");
         return;
