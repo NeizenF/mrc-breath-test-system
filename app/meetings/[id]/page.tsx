@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { normalizeName } from "@/lib/normalizeName";
+import { importMrcUrl } from "@/lib/importMrcUrl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,19 +34,6 @@ type Race = {
   race_class: string | null;
 };
 
-type ImportedEntry = {
-  gate: number;
-  horse_name: string;
-  driver_name_raw: string | null;
-  scratched: boolean;
-};
-
-type DriverMatch = {
-  id: string;
-  full_name: string;
-  id_card: string | null;
-  phone: string | null;
-};
 
 export default function MeetingDetailPage() {
   const params = useParams<{ id: string }>();
@@ -137,184 +124,13 @@ export default function MeetingDetailPage() {
     await load();
   }
 
-  async function importSingleMrcUrl(url: string) {
-    const { data: { session } } = await supabase.auth.getSession();
-
-    const res = await fetch("/api/mrc-import", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(session?.access_token
-          ? { Authorization: `Bearer ${session.access_token}` }
-          : {}),
-      },
-      body: JSON.stringify({ url }),
-    });
-
-    const result = await res.json();
-
-    if (!res.ok) {
-      throw new Error(result.error || "Import failed.");
-    }
-
-    const raceNumber = result.race_number as number | null;
-    const raceTime = (result.race_time as string | null) ?? null;
-    const raceDistance = (result.race_distance as string | null) ?? null;
-    const raceClass = (result.race_class as string | null) ?? null;
-    const raceName = (result.race_name as string | null) ?? null;
-    const qualifiersData = result.qualifiers as { count: number; nextStage: string } | null;
-    const importedEntries = (result.entries || []) as ImportedEntry[];
-
-    if (!raceNumber) {
-      throw new Error("Could not detect the race number from the MRC page.");
-    }
-
-    if (importedEntries.length === 0) {
-      throw new Error(`No entries found for race ${raceNumber}.`);
-    }
-
-    let raceId: string | null = null;
-
-    const { data: existingRace, error: raceFindError } = await supabase
-      .from("races")
-      .select("id")
-      .eq("meeting_id", meetingId)
-      .eq("race_number", raceNumber)
-      .maybeSingle();
-
-    if (raceFindError) {
-      throw new Error(raceFindError.message);
-    }
-
-    if (existingRace?.id) {
-      raceId = existingRace.id;
-
-      const { error: updateRaceError } = await supabase
-        .from("races")
-        .update({
-          race_time: raceTime,
-          race_distance: raceDistance,
-          race_class: raceClass,
-          race_name: raceName,
-          qualifiers: qualifiersData?.count ?? null,
-          qualifiers_next_stage: qualifiersData?.nextStage ?? null,
-        })
-        .eq("id", raceId);
-
-      if (updateRaceError) {
-        throw new Error(updateRaceError.message);
-      }
-    } else {
-      const { data: newRace, error: raceInsertError } = await supabase
-        .from("races")
-        .insert({
-          meeting_id: meetingId,
-          race_number: raceNumber,
-          race_time: raceTime,
-          race_distance: raceDistance,
-          race_class: raceClass,
-          race_name: raceName,
-          qualifiers: qualifiersData?.count ?? null,
-          qualifiers_next_stage: qualifiersData?.nextStage ?? null,
-        })
-        .select("id")
-        .single();
-
-      if (raceInsertError) {
-        throw new Error(raceInsertError.message);
-      }
-
-      raceId = newRace.id;
-    }
-
-    const { data: allDrivers, error: driversError } = await supabase
-      .from("drivers")
-      .select("id,full_name,id_card,phone");
-
-    if (driversError) {
-      throw new Error(driversError.message);
-    }
-
-    const drivers = ((allDrivers as DriverMatch[]) || []).map((driver) => ({
-      ...driver,
-      normalized_full_name: normalizeName(driver.full_name || ""),
-    }));
-
-    // Fetch all existing entries for this race and build gate-based maps.
-    const { data: allExisting } = await supabase
-      .from("entries")
-      .select("id, gate, scratched")
-      .eq("race_id", raceId);
-
-    const existing = (allExisting ?? []) as { id: string; gate: number | null; scratched: boolean | null }[];
-
-    // gate → id for active entries
-    const activeByGate = new Map<number, string>();
-    // gate → id for scratched entries
-    const scratchedByGate = new Map<number, string>();
-
-    for (const e of existing) {
-      if (e.gate === null) continue;
-      if (!e.scratched) activeByGate.set(e.gate, e.id);
-      else scratchedByGate.set(e.gate, e.id);
-    }
-
-    // Track which scratched gates we've already processed this import
-    // to prevent duplicates if MRC lists the same horse twice on a page.
-    const processedScratchedGates = new Set<number>();
-
-    for (const item of importedEntries) {
-      let matchedDriverId: string | null = null;
-
-      if (!item.scratched && item.driver_name_raw) {
-        const normalizedImportedName = normalizeName(item.driver_name_raw);
-
-        const matchedDriver = drivers.find(
-          (driver) => driver.normalized_full_name === normalizedImportedName
-        );
-
-        matchedDriverId = matchedDriver?.id ?? null;
-      }
-
-      const payload = {
-        race_id: raceId,
-        gate: item.gate,
-        horse_name: item.horse_name,
-        driver_name_raw: item.driver_name_raw,
-        driver_id: item.scratched ? null : matchedDriverId,
-        scratched: item.scratched,
-      };
-
-      if (item.scratched) {
-        if (item.gate === null) continue;
-        // Skip if we already processed this gate in this import run
-        if (processedScratchedGates.has(item.gate)) continue;
-        processedScratchedGates.add(item.gate);
-        // Update whichever entry exists at this gate (active or scratched), or insert
-        const existingId = activeByGate.get(item.gate) ?? scratchedByGate.get(item.gate) ?? null;
-        const { error } = existingId
-          ? await supabase.from("entries").update(payload).eq("id", existingId)
-          : await supabase.from("entries").insert(payload);
-        if (error) throw new Error(error.message);
-      } else {
-        const existingId = item.gate !== null ? (activeByGate.get(item.gate) ?? null) : null;
-        const { error } = existingId
-          ? await supabase.from("entries").update(payload).eq("id", existingId)
-          : await supabase.from("entries").insert(payload);
-        if (error) throw new Error(error.message);
-      }
-    }
-
-    return { raceNumber, importedCount: importedEntries.length };
-  }
-
   async function updateFromMrc(url: string) {
     setSingleMrcOpen(false);
     setSingleMrcInput("");
     setUpdatingMrc(true);
 
     try {
-      const result = await importSingleMrcUrl(url);
+      const result = await importMrcUrl(url, meetingId);
       await load();
       toast.success(`Imported ${result.importedCount} entries for race ${result.raceNumber}.`);
     } catch (error) {
@@ -342,7 +158,7 @@ export default function MeetingDetailPage() {
       const results: string[] = [];
 
       for (const url of urls) {
-        const result = await importSingleMrcUrl(url);
+        const result = await importMrcUrl(url, meetingId);
         results.push(`Race ${result.raceNumber}: ${result.importedCount} entries`);
       }
 

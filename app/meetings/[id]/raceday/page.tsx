@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
+import { importMrcUrl } from "@/lib/importMrcUrl";
 
 function parseRaceDateTime(meetingDate: string, raceTime: string): Date | null {
   const t = raceTime.trim();
@@ -162,6 +163,7 @@ export default function RaceDayPage() {
   const draggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [isAdmin, setIsAdmin] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   // Race timer
   const [timerPos, setTimerPos] = useState<{ x: number; y: number } | null>(null);
   const [timerVisible, setTimerVisible] = useState(false);
@@ -816,6 +818,31 @@ export default function RaceDayPage() {
     );
   }
 
+  async function syncFromMrc() {
+    setSyncing(true);
+    try {
+      const { data: m } = await supabase
+        .from("meetings").select("import_urls").eq("id", meetingId).single();
+      const urls = ((m as { import_urls: string | null })?.import_urls ?? "")
+        .split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+      if (urls.length === 0) {
+        toast.error("No saved links for this meeting. Add them on the Import page first.");
+        return;
+      }
+      const results: string[] = [];
+      for (const url of urls) {
+        const r = await importMrcUrl(url, meetingId);
+        results.push(`Race ${r.raceNumber}`);
+      }
+      await reloadEverything();
+      toast.success(`Synced: ${results.join(", ")}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   function handleMeetingChange(nextMeetingId: string) {
     if (!nextMeetingId || nextMeetingId === meetingId) return;
     router.push(`/meetings/${nextMeetingId}/raceday`);
@@ -846,6 +873,11 @@ export default function RaceDayPage() {
             <Button size="sm" variant="ghost" className="text-xs h-8 px-3" onClick={() => router.push("/dashboard")}>Home</Button>
             {isAdmin && (
               <Button size="sm" variant="ghost" className="text-xs h-8 px-3" onClick={() => router.push(`/meetings/${meetingId}`)}>Meeting</Button>
+            )}
+            {isAdmin && (
+              <Button size="sm" variant="ghost" className="text-xs h-8 px-3" onClick={syncFromMrc} disabled={syncing}>
+                {syncing ? "Syncing…" : "Sync MRC"}
+              </Button>
             )}
             <div className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
             <Button size="sm" variant={clockVisible ? "secondary" : "ghost"} className="text-xs h-8 px-3" onClick={() => setClockVisible((v) => !v)}>Clock</Button>
