@@ -23,6 +23,7 @@ type Meeting = {
   id: string;
   title: string | null;
   meeting_date: string | null;
+  import_urls: string | null;
 };
 
 type Race = {
@@ -69,7 +70,7 @@ export default function MeetingDetailPage() {
 
     const { data: m, error: meetingError } = await supabase
       .from("meetings")
-      .select("id,title,meeting_date")
+      .select("id,title,meeting_date,import_urls")
       .eq("id", meetingId)
       .single();
 
@@ -91,8 +92,16 @@ export default function MeetingDetailPage() {
       return;
     }
 
-    setMeeting((m as Meeting) || null);
+    const mtg = (m as Meeting) || null;
+    setMeeting(mtg);
     setRaces((r as Race[]) || []);
+    // Supabase is source of truth; fall back to localStorage if column is empty
+    if (mtg?.import_urls != null) {
+      setBulkUrls(mtg.import_urls);
+    } else {
+      const local = localStorage.getItem(bulkUrlsStorageKey);
+      if (local) setBulkUrls(local);
+    }
     setLoading(false);
   }
 
@@ -360,19 +369,14 @@ export default function MeetingDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
 
+  // Save to localStorage immediately + sync to Supabase after 1.5s idle
   useEffect(() => {
     if (!meetingId) return;
-
-    const saved = localStorage.getItem(bulkUrlsStorageKey);
-    if (saved) {
-      setBulkUrls(saved);
-    }
-  }, [meetingId, bulkUrlsStorageKey]);
-
-  useEffect(() => {
-    if (!meetingId) return;
-
     localStorage.setItem(bulkUrlsStorageKey, bulkUrls);
+    const t = setTimeout(() => {
+      supabase.from("meetings").update({ import_urls: bulkUrls }).eq("id", meetingId);
+    }, 1500);
+    return () => clearTimeout(t);
   }, [bulkUrls, meetingId, bulkUrlsStorageKey]);
 
   const title = useMemo(() => {
@@ -432,8 +436,7 @@ export default function MeetingDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Paste one MRC race link per line. They now stay saved for this meeting,
-              even after refresh.
+              Paste one MRC race link per line. Links are saved and sync across all devices.
             </p>
 
             <textarea
