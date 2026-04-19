@@ -669,6 +669,7 @@ export default function RaceDayPage() {
           filter: `id=eq.${meetingId}`,
         },
         async () => {
+          if (syncingRef.current) return;
           await reloadEverything();
         }
       )
@@ -681,6 +682,7 @@ export default function RaceDayPage() {
           filter: `meeting_id=eq.${meetingId}`,
         },
         async () => {
+          if (syncingRef.current) return;
           await reloadEverything();
         }
       )
