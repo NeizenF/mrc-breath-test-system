@@ -164,6 +164,7 @@ export default function RaceDayPage() {
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [isAdmin, setIsAdmin] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const syncingRef = useRef(false);
   // Race timer
   const [timerPos, setTimerPos] = useState<{ x: number; y: number } | null>(null);
   const [timerVisible, setTimerVisible] = useState(false);
@@ -691,6 +692,7 @@ export default function RaceDayPage() {
           table: "entries",
         },
         async () => {
+          if (syncingRef.current) return;
           await reloadEverything();
         }
       )
@@ -820,6 +822,7 @@ export default function RaceDayPage() {
 
   async function syncFromMrc() {
     setSyncing(true);
+    syncingRef.current = true;
     try {
       const { data: m } = await supabase
         .from("meetings").select("import_urls").eq("id", meetingId).single();
@@ -841,6 +844,7 @@ export default function RaceDayPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sync failed.");
     } finally {
+      syncingRef.current = false;
       setSyncing(false);
     }
   }
