@@ -46,7 +46,10 @@ export default function MeetingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [updatingMrc, setUpdatingMrc] = useState(false);
   const [bulkImporting, setBulkImporting] = useState(false);
-  const [bulkUrls, setBulkUrls] = useState("");
+  const [bulkUrls, setBulkUrls] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(`bulk-mrc-urls-${meetingId}`) ?? "") : ""
+  );
+  const [urlsReady, setUrlsReady] = useState(false);
   const [createRacesOpen, setCreateRacesOpen] = useState(false);
   const [createRacesInput, setCreateRacesInput] = useState("");
   const [singleMrcOpen, setSingleMrcOpen] = useState(false);
@@ -89,6 +92,7 @@ export default function MeetingDetailPage() {
       const local = localStorage.getItem(bulkUrlsStorageKey);
       if (local) setBulkUrls(local);
     }
+    setUrlsReady(true);
     setLoading(false);
   }
 
@@ -185,15 +189,16 @@ export default function MeetingDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
 
-  // Save to localStorage immediately + sync to Supabase after 1.5s idle
+  // Save to localStorage immediately + sync to Supabase after 1.5s idle.
+  // urlsReady gates this so the initial empty render doesn't wipe saved data.
   useEffect(() => {
-    if (!meetingId) return;
+    if (!meetingId || !urlsReady) return;
     localStorage.setItem(bulkUrlsStorageKey, bulkUrls);
     const t = setTimeout(() => {
       supabase.from("meetings").update({ import_urls: bulkUrls }).eq("id", meetingId);
     }, 1500);
     return () => clearTimeout(t);
-  }, [bulkUrls, meetingId, bulkUrlsStorageKey]);
+  }, [bulkUrls, meetingId, bulkUrlsStorageKey, urlsReady]);
 
   const title = useMemo(() => {
     if (!meeting) return "Meeting";
