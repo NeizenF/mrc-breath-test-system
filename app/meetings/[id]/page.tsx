@@ -157,6 +157,7 @@ export default function MeetingDetailPage() {
     }
 
     setBulkImporting(true);
+    await saveUrlsToSupabase();
 
     try {
       const results: string[] = [];
@@ -189,16 +190,22 @@ export default function MeetingDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
 
-  // Save to localStorage immediately + sync to Supabase after 1.5s idle.
+  // Save to localStorage immediately + sync to Supabase after 400ms idle.
   // urlsReady gates this so the initial empty render doesn't wipe saved data.
   useEffect(() => {
     if (!meetingId || !urlsReady) return;
     localStorage.setItem(bulkUrlsStorageKey, bulkUrls);
-    const t = setTimeout(() => {
-      supabase.from("meetings").update({ import_urls: bulkUrls }).eq("id", meetingId);
-    }, 1500);
+    const t = setTimeout(async () => {
+      const { error } = await supabase.from("meetings").update({ import_urls: bulkUrls }).eq("id", meetingId);
+      if (error) console.error("Failed to save import URLs to Supabase:", error);
+    }, 400);
     return () => clearTimeout(t);
   }, [bulkUrls, meetingId, bulkUrlsStorageKey, urlsReady]);
+
+  async function saveUrlsToSupabase() {
+    const { error } = await supabase.from("meetings").update({ import_urls: bulkUrls }).eq("id", meetingId);
+    if (error) console.error("Failed to save import URLs:", error);
+  }
 
   const title = useMemo(() => {
     if (!meeting) return "Meeting";
