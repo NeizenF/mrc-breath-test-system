@@ -318,6 +318,13 @@ export async function POST(req: Request) {
     const html = await response.text();
     const text = stripTags(html);
 
+    if (/does not exist in our database/i.test(text)) {
+      return NextResponse.json(
+        { error: "Race not found on the MRC website. The URL may be outdated — grab a fresh link from maltaracingclub.com." },
+        { status: 400 }
+      );
+    }
+
     const race_number = parseRaceNumber(html, text);
     const race_time = parseRaceTime(text);
     const race_distance = parseRaceDistance(text);
