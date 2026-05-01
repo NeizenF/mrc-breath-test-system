@@ -56,11 +56,21 @@ function normalizeSpaces(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function parseRaceNumber(text: string): number | null {
+function parseRaceNumber(html: string, text: string): number | null {
+  // Try title tag first (most reliable)
+  const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+  if (titleMatch) {
+    const t = titleMatch[1];
+    const m = t.match(/Race\s+(\d+)/i) || t.match(/(\d+)/);
+    if (m) return Number(m[1]);
+  }
+  // Try common text patterns
   const match =
     text.match(/Meeting\s+\d+\s*-\s*Race\s+(\d+)/i) ||
+    text.match(/Race\s+No\.?\s*(\d+)/i) ||
+    text.match(/Race\s+#\s*(\d+)/i) ||
+    text.match(/\bRace\s+(\d+)\b/i) ||
     text.match(/\bRACE\s+(\d+)\b/i);
-
   return match ? Number(match[1]) : null;
 }
 
@@ -308,7 +318,7 @@ export async function POST(req: Request) {
     const html = await response.text();
     const text = stripTags(html);
 
-    const race_number = parseRaceNumber(text);
+    const race_number = parseRaceNumber(html, text);
     const race_time = parseRaceTime(text);
     const race_distance = parseRaceDistance(text);
     const race_class = parseRaceClass(text);
@@ -326,7 +336,8 @@ export async function POST(req: Request) {
       entries,
       count: entries.length,
       finalUrl: response.url,
-      preview: text.slice(0, 2000),
+      preview: text.slice(0, 3000),
+      debug_race_number_found: race_number !== null,
     });
   } catch (error) {
     console.error(error);
