@@ -304,9 +304,12 @@ export default function EditRacePage() {
   }
 
   async function addEntry() {
+    const { data: gateData } = await supabase.from("entries").select("gate").eq("race_id", raceId);
+    const maxGate = Math.max(0, ...((gateData || []).map((e) => e.gate).filter((g) => g != null) as number[]));
+
     const { error } = await supabase.from("entries").insert({
       race_id: raceId,
-      gate: null,
+      gate: maxGate + 1,
       horse_name: null,
       scratched: false,
       driver_id: null,
