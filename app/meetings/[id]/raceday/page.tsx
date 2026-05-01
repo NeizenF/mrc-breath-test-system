@@ -9,7 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { importMrcUrl } from "@/lib/importMrcUrl";
-import { MessageSquare } from "lucide-react";
 
 function parseRaceDateTime(meetingDate: string, raceTime: string): Date | null {
   const t = raceTime.trim();
@@ -1268,16 +1267,6 @@ export default function RaceDayPage() {
                                     >
                                       Clear
                                     </Button>
-                                    {!row.scratched && row.driver_phone && (
-                                      <a
-                                        href={`sms:${row.driver_phone}?body=${encodeURIComponent(`Hi ${row.driver_name}, please report for your breath test before Race ${row.race_number}. - MRC`)}`}
-                                        title="Send SMS nudge"
-                                      >
-                                        <Button variant="outline" size="icon" asChild>
-                                          <span><MessageSquare className="h-4 w-4" /></span>
-                                        </Button>
-                                      </a>
-                                    )}
                                   </div>
                                 </td>
                               </tr>
