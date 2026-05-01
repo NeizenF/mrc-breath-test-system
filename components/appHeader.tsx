@@ -88,7 +88,8 @@ export default function AppHeader() {
           </nav>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden text-[10px] font-mono text-slate-400 dark:text-slate-600 sm:block">v1.0.6</span>
           <Button
             variant="ghost"
             size="icon"
