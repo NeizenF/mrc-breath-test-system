@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 
@@ -94,6 +95,7 @@ export default function AuditLogPage() {
 
         if (error) {
           console.error("Failed to load audit logs:", error);
+          toast.error("Failed to load audit logs.");
         } else {
           setLogs((data as AuditLog[]) || []);
         }
