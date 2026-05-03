@@ -173,6 +173,7 @@ export default function MeetingDeclarationPage() {
     const grouped = new Map<string, DeclarationDriverRow>();
 
     for (const entry of allEntries) {
+      if (!entry.driver_id && !entry.driver_name_raw) continue; // no driver assigned yet
       if (entry.scratched && !testMap.get(entry.id)?.tested) continue;
 
       const linkedDriver = entry.driver_id ? driverMap.get(entry.driver_id) : null;

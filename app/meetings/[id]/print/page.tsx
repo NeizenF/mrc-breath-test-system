@@ -181,9 +181,12 @@ export default function MeetingPrintPage() {
 
     const testMap = new Map(tests.map((t) => [t.entry_id, t]));
 
+    // Exclude entries with no driver assigned (blank replacement slots)
     // Include non-scratched entries + scratched entries that have a test result
     const entries = allEntries.filter(
-      (entry) => !entry.scratched || testMap.has(entry.id)
+      (entry) =>
+        (entry.driver_id || entry.driver_name_raw) &&
+        (!entry.scratched || testMap.has(entry.id))
     );
 
     const driverMap = new Map(drivers.map((d) => [d.id, d]));
