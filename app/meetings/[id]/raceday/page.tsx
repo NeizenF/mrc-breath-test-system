@@ -79,6 +79,7 @@ type TestRow = {
   tested_at: string | null;
   tested_by: string | null;
   result: "negative" | "positive" | null;
+  alcohol_level: string | null;
 };
 
 type Row = {
@@ -96,6 +97,7 @@ type Row = {
   tested: boolean;
   tested_at: string | null;
   result: "negative" | "positive" | null;
+  alcohol_level: string | null;
 };
 
 function formatMeetingLabel(meeting: Meeting) {
@@ -350,7 +352,7 @@ export default function RaceDayPage() {
           entryIds.length > 0
             ? supabase
                 .from("tests")
-                .select("id,entry_id,tested,tested_at,tested_by,meeting_id,result")
+                .select("id,entry_id,tested,tested_at,tested_by,meeting_id,result,alcohol_level")
                 .eq("meeting_id", meetingId)
                 .in("entry_id", entryIds)
             : Promise.resolve({ data: [] as TestRow[], error: null }),
@@ -403,6 +405,7 @@ export default function RaceDayPage() {
             tested: !!test?.tested,
             tested_at: test?.tested_at || null,
             result: test?.result || null,
+            alcohol_level: test?.alcohol_level || null,
           };
         })
         .sort((a, b) => {
@@ -440,6 +443,17 @@ export default function RaceDayPage() {
           : row
       )
     );
+  }
+
+  async function saveAlcoholLevel(entryId: string, level: string) {
+    const trimmed = level.trim() || null;
+    const { error } = await supabase
+      .from("tests")
+      .update({ alcohol_level: trimmed })
+      .eq("entry_id", entryId)
+      .eq("meeting_id", meetingId);
+    if (error) { toast.error(error.message); return; }
+    setRows((cur) => cur.map((r) => r.entry_id === entryId ? { ...r, alcohol_level: trimmed } : r));
   }
 
   async function setResultForRow(
@@ -1230,7 +1244,17 @@ export default function RaceDayPage() {
                                   {row.result === "negative"
                                     ? "Negative"
                                     : row.result === "positive"
-                                    ? "Positive"
+                                    ? <div className="space-y-1">
+                                        <span className="text-red-600">Positive</span>
+                                        <input
+                                          type="text"
+                                          defaultValue={row.alcohol_level || ""}
+                                          onBlur={(e) => saveAlcoholLevel(row.entry_id, e.target.value)}
+                                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                                          placeholder="Reading…"
+                                          className="block w-full rounded border border-slate-300 px-2 py-0.5 text-xs font-normal text-slate-700 bg-white focus:outline-none focus:border-red-400"
+                                        />
+                                      </div>
                                     : row.scratched
                                     ? "Scratched"
                                     : row.driver_name === "NOT DECLARED"

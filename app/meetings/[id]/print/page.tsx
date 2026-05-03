@@ -39,6 +39,7 @@ type TestRow = {
   entry_id: string;
   tested: boolean;
   result: "negative" | "positive" | null;
+  alcohol_level: string | null;
 };
 
 type PrintDriverRow = {
@@ -48,6 +49,7 @@ type PrintDriverRow = {
   phone: string | null;
   has_result: boolean;
   result: "negative" | "positive" | null;
+  alcohol_level: string | null;
 };
 
 type EditablePrintRow = {
@@ -56,6 +58,7 @@ type EditablePrintRow = {
   id_card: string;
   phone: string;
   result: "negative" | "positive" | null;
+  alcohol_level: string;
 };
 
 export default function MeetingPrintPage() {
@@ -163,7 +166,7 @@ export default function MeetingPrintPage() {
     if (allEntryIds.length > 0) {
       const { data: testsData, error: testsError } = await supabase
         .from("tests")
-        .select("id,entry_id,tested,result")
+        .select("id,entry_id,tested,result,alcohol_level")
         .eq("meeting_id", meetingId)
         .in("entry_id", allEntryIds);
 
@@ -208,11 +211,13 @@ export default function MeetingPrintPage() {
           phone: linkedDriver?.phone || null,
           has_result: result !== null,
           result,
+          alcohol_level: test?.alcohol_level || null,
         });
       } else {
         if (result === "positive") {
           existing.result = "positive";
           existing.has_result = true;
+          if (test?.alcohol_level) existing.alcohol_level = test.alcohol_level;
         } else if (result === "negative" && existing.result !== "positive") {
           existing.result = "negative";
           existing.has_result = true;
@@ -237,6 +242,7 @@ export default function MeetingPrintPage() {
         id_card: row.id_card || "",
         phone: row.phone || "",
         result: row.result,
+        alcohol_level: row.alcohol_level || "",
       }))
     );
     setLoading(false);
@@ -262,6 +268,7 @@ export default function MeetingPrintPage() {
         id_card: row.id_card || "",
         phone: row.phone || "",
         result: row.result,
+        alcohol_level: row.alcohol_level || "",
       }))
     );
     setNotes("");
@@ -531,27 +538,37 @@ export default function MeetingPrintPage() {
                       }`}
                     >
                       {editMode ? (
-                        <select
-                          value={row.result || ""}
-                          onChange={(e) =>
-                            updateEditableRow(
-                              row.key,
-                              "result",
-                              e.target.value === ""
-                                ? null
-                                : (e.target.value as "negative" | "positive")
-                            )
-                          }
-                          className="rounded border px-2 py-1 text-[12px]"
-                        >
-                          <option value="">Pending</option>
-                          <option value="negative">Negative</option>
-                          <option value="positive">Positive</option>
-                        </select>
+                        <div className="space-y-1">
+                          <select
+                            value={row.result || ""}
+                            onChange={(e) =>
+                              updateEditableRow(
+                                row.key,
+                                "result",
+                                e.target.value === ""
+                                  ? null
+                                  : (e.target.value as "negative" | "positive")
+                              )
+                            }
+                            className="rounded border px-2 py-1 text-[12px]"
+                          >
+                            <option value="">Pending</option>
+                            <option value="negative">Negative</option>
+                            <option value="positive">Positive</option>
+                          </select>
+                          {row.result === "positive" && (
+                            <Input
+                              value={row.alcohol_level}
+                              onChange={(e) => updateEditableRow(row.key, "alcohol_level", e.target.value)}
+                              placeholder="Reading"
+                              className="h-6 border-slate-300 bg-transparent p-1 text-[11px] shadow-none focus-visible:ring-0"
+                            />
+                          )}
+                        </div>
                       ) : row.result === "negative" ? (
                         "Negative"
                       ) : row.result === "positive" ? (
-                        "Positive"
+                        <span>Positive{row.alcohol_level ? ` — ${row.alcohol_level}` : ""}</span>
                       ) : (
                         "Pending"
                       )}
