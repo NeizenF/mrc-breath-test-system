@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-import { importMrcUrl } from "@/lib/importMrcUrl";
+import { importMrcUrl, importMrcHtml } from "@/lib/importMrcUrl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,9 @@ export default function MeetingDetailPage() {
   const [createRacesInput, setCreateRacesInput] = useState("");
   const [singleMrcOpen, setSingleMrcOpen] = useState(false);
   const [singleMrcInput, setSingleMrcInput] = useState("");
+  const [pasteHtmlOpen, setPasteHtmlOpen] = useState(false);
+  const [pasteHtmlInput, setPasteHtmlInput] = useState("");
+  const [pasteHtmlImporting, setPasteHtmlImporting] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -126,6 +129,22 @@ export default function MeetingDetailPage() {
     }
 
     await load();
+  }
+
+  async function importFromPastedHtml() {
+    if (!pasteHtmlInput.trim()) return;
+    setPasteHtmlImporting(true);
+    try {
+      const result = await importMrcHtml(pasteHtmlInput.trim(), meetingId);
+      setPasteHtmlOpen(false);
+      setPasteHtmlInput("");
+      await load();
+      toast.success(`Imported ${result.importedCount} entries for race ${result.raceNumber}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Import failed.");
+    } finally {
+      setPasteHtmlImporting(false);
+    }
   }
 
   async function updateFromMrc(url: string) {
@@ -245,6 +264,14 @@ export default function MeetingDetailPage() {
               disabled={updatingMrc || bulkImporting}
             >
               {updatingMrc ? "Updating..." : "Update one race"}
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => setPasteHtmlOpen(true)}
+              disabled={updatingMrc || bulkImporting || pasteHtmlImporting}
+            >
+              Paste page source
             </Button>
 
             <Button onClick={() => setCreateRacesOpen(true)}>Create races</Button>
@@ -375,6 +402,31 @@ export default function MeetingDetailPage() {
             <Button variant="outline" onClick={() => { setSingleMrcOpen(false); setSingleMrcInput(""); }}>Cancel</Button>
             <Button onClick={() => singleMrcInput.trim() && updateFromMrc(singleMrcInput.trim())} disabled={updatingMrc}>
               {updatingMrc ? "Importing..." : "Import"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Paste HTML dialog */}
+      <Dialog open={pasteHtmlOpen} onOpenChange={(o) => { if (!o) { setPasteHtmlOpen(false); setPasteHtmlInput(""); } }}>
+        <DialogContent showCloseButton={false} className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Paste page source</DialogTitle>
+            <DialogDescription>
+              Open the MRC race page in your browser → right-click anywhere → <strong>View Page Source</strong> → Select All (Ctrl+A) → Copy (Ctrl+C) → paste below.
+            </DialogDescription>
+          </DialogHeader>
+          <textarea
+            value={pasteHtmlInput}
+            onChange={(e) => setPasteHtmlInput(e.target.value)}
+            placeholder="Paste HTML source here..."
+            className="min-h-[200px] w-full rounded-md border bg-background px-3 py-2 text-sm font-mono outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPasteHtmlOpen(false); setPasteHtmlInput(""); }}>Cancel</Button>
+            <Button onClick={importFromPastedHtml} disabled={pasteHtmlImporting || !pasteHtmlInput.trim()}>
+              {pasteHtmlImporting ? "Importing..." : "Import"}
             </Button>
           </DialogFooter>
         </DialogContent>

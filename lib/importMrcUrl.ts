@@ -15,24 +15,10 @@ type DriverMatch = {
   phone: string | null;
 };
 
-export async function importMrcUrl(
-  url: string,
+async function processImportResult(
+  result: Record<string, unknown>,
   meetingId: string
 ): Promise<{ raceNumber: number; importedCount: number }> {
-  const { data: { session } } = await supabase.auth.getSession();
-
-  const res = await fetch("/api/mrc-import", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-    },
-    body: JSON.stringify({ url }),
-  });
-
-  const result = await res.json();
-  if (!res.ok) throw new Error(result.error || "Import failed.");
-
   const raceNumber = result.race_number as number | null;
   const raceTime = (result.race_time as string | null) ?? null;
   const raceDistance = (result.race_distance as string | null) ?? null;
@@ -139,4 +125,36 @@ export async function importMrcUrl(
   }
 
   return { raceNumber, importedCount: importedEntries.length };
+}
+
+async function callImportApi(body: Record<string, string>, token: string | undefined) {
+  const res = await fetch("/api/mrc-import", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.error || "Import failed.");
+  return result;
+}
+
+export async function importMrcUrl(
+  url: string,
+  meetingId: string
+): Promise<{ raceNumber: number; importedCount: number }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const result = await callImportApi({ url }, session?.access_token);
+  return processImportResult(result, meetingId);
+}
+
+export async function importMrcHtml(
+  html: string,
+  meetingId: string
+): Promise<{ raceNumber: number; importedCount: number }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const result = await callImportApi({ html }, session?.access_token);
+  return processImportResult(result, meetingId);
 }

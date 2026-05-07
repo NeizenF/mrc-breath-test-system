@@ -276,56 +276,64 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { url } = body as { url?: string };
+    const { url, html: pastedHtml } = body as { url?: string; html?: string };
 
-    if (!url) {
-      return NextResponse.json({ error: "Missing URL." }, { status: 400 });
-    }
+    let html: string;
 
-    // Validate that URL is from the MRC domain
-    try {
-      const parsed = new URL(url);
-      if (!ALLOWED_HOSTNAMES.includes(parsed.hostname)) {
+    if (pastedHtml) {
+      // Use pasted HTML directly — no fetch needed
+      if (pastedHtml.trim().length < 100) {
+        return NextResponse.json({ error: "Pasted HTML is too short to be valid." }, { status: 400 });
+      }
+      html = pastedHtml;
+    } else if (url) {
+      // Validate that URL is from the MRC domain
+      try {
+        const parsed = new URL(url);
+        if (!ALLOWED_HOSTNAMES.includes(parsed.hostname)) {
+          return NextResponse.json(
+            { error: "Only Malta Racing Club URLs are accepted." },
+            { status: 400 }
+          );
+        }
+      } catch {
+        return NextResponse.json({ error: "Invalid URL." }, { status: 400 });
+      }
+
+      const response = await fetch(url, {
+        cache: "no-store",
+        redirect: "follow",
+        headers: {
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-GB,en;q=0.9,mt;q=0.8",
+          "accept-encoding": "gzip, deflate, br",
+          "referer": "https://maltaracingclub.com/",
+          "origin": "https://maltaracingclub.com",
+          "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": '"Windows"',
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "same-origin",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "cache-control": "max-age=0",
+          "connection": "keep-alive",
+        },
+      });
+
+      if (!response.ok) {
         return NextResponse.json(
-          { error: "Only Malta Racing Club URLs are accepted." },
+          { error: `Failed to fetch MRC page: ${response.status}` },
           { status: 400 }
         );
       }
-    } catch {
-      return NextResponse.json({ error: "Invalid URL." }, { status: 400 });
+
+      html = await response.text();
+    } else {
+      return NextResponse.json({ error: "Provide either a URL or pasted HTML." }, { status: 400 });
     }
-
-    const response = await fetch(url, {
-      cache: "no-store",
-      redirect: "follow",
-      headers: {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        "accept-language": "en-GB,en;q=0.9,mt;q=0.8",
-        "accept-encoding": "gzip, deflate, br",
-        "referer": "https://maltaracingclub.com/",
-        "origin": "https://maltaracingclub.com",
-        "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-        "sec-fetch-dest": "document",
-        "sec-fetch-mode": "navigate",
-        "sec-fetch-site": "same-origin",
-        "sec-fetch-user": "?1",
-        "upgrade-insecure-requests": "1",
-        "cache-control": "max-age=0",
-        "connection": "keep-alive",
-      },
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Failed to fetch MRC page: ${response.status}` },
-        { status: 400 }
-      );
-    }
-
-    const html = await response.text();
     const text = stripTags(html);
 
     if (/does not exist in our database/i.test(text)) {
@@ -352,7 +360,7 @@ export async function POST(req: Request) {
       qualifiers,
       entries,
       count: entries.length,
-      finalUrl: response.url,
+      finalUrl: pastedHtml ? null : (url ?? null),
       preview: text.slice(0, 3000),
       debug_race_number_found: race_number !== null,
     });
