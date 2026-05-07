@@ -57,6 +57,7 @@ export default function MeetingDetailPage() {
   const [pasteHtmlOpen, setPasteHtmlOpen] = useState(false);
   const [pasteHtmlInput, setPasteHtmlInput] = useState("");
   const [pasteHtmlImporting, setPasteHtmlImporting] = useState(false);
+  const [pasteHtmlLog, setPasteHtmlLog] = useState<{ race: number; count: number; error?: string }[]>([]);
 
   async function load() {
     setLoading(true);
@@ -136,15 +137,21 @@ export default function MeetingDetailPage() {
     setPasteHtmlImporting(true);
     try {
       const result = await importMrcHtml(pasteHtmlInput.trim(), meetingId);
-      setPasteHtmlOpen(false);
+      setPasteHtmlLog((prev) => [...prev, { race: result.raceNumber, count: result.importedCount }]);
       setPasteHtmlInput("");
       await load();
-      toast.success(`Imported ${result.importedCount} entries for race ${result.raceNumber}.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Import failed.");
+      const msg = error instanceof Error ? error.message : "Import failed.";
+      setPasteHtmlLog((prev) => [...prev, { race: 0, count: 0, error: msg }]);
     } finally {
       setPasteHtmlImporting(false);
     }
+  }
+
+  function closePasteHtml() {
+    setPasteHtmlOpen(false);
+    setPasteHtmlInput("");
+    setPasteHtmlLog([]);
   }
 
   async function updateFromMrc(url: string) {
@@ -408,25 +415,47 @@ export default function MeetingDetailPage() {
       </Dialog>
 
       {/* Paste HTML dialog */}
-      <Dialog open={pasteHtmlOpen} onOpenChange={(o) => { if (!o) { setPasteHtmlOpen(false); setPasteHtmlInput(""); } }}>
+      <Dialog open={pasteHtmlOpen} onOpenChange={(o) => { if (!o) closePasteHtml(); }}>
         <DialogContent showCloseButton={false} className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Paste page source</DialogTitle>
-            <DialogDescription>
-              Open the MRC race page in your browser → right-click anywhere → <strong>View Page Source</strong> → Select All (Ctrl+A) → Copy (Ctrl+C) → paste below.
+            <DialogTitle>Import from MRC</DialogTitle>
+            <DialogDescription asChild>
+              <ol className="mt-1 list-decimal pl-4 text-sm space-y-1">
+                <li>Open the MRC race page in your browser</li>
+                <li>Press <kbd className="rounded border px-1 py-0.5 text-xs font-mono bg-muted">Ctrl+U</kbd> to open page source</li>
+                <li>Press <kbd className="rounded border px-1 py-0.5 text-xs font-mono bg-muted">Ctrl+A</kbd> then <kbd className="rounded border px-1 py-0.5 text-xs font-mono bg-muted">Ctrl+C</kbd> to copy all</li>
+                <li>Click below and press <kbd className="rounded border px-1 py-0.5 text-xs font-mono bg-muted">Ctrl+V</kbd> to paste</li>
+              </ol>
             </DialogDescription>
           </DialogHeader>
+
+          {/* Log of imported races */}
+          {pasteHtmlLog.length > 0 && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 space-y-1">
+              {pasteHtmlLog.map((entry, i) =>
+                entry.error ? (
+                  <p key={i} className="text-sm text-destructive">✗ {entry.error}</p>
+                ) : (
+                  <p key={i} className="text-sm text-green-600 dark:text-green-400">✓ Race {entry.race} — {entry.count} entries imported</p>
+                )
+              )}
+            </div>
+          )}
+
           <textarea
             value={pasteHtmlInput}
             onChange={(e) => setPasteHtmlInput(e.target.value)}
-            placeholder="Paste HTML source here..."
-            className="min-h-[200px] w-full rounded-md border bg-background px-3 py-2 text-sm font-mono outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            placeholder="Paste source here (Ctrl+V)…"
+            className="min-h-[160px] w-full rounded-md border bg-background px-3 py-2 text-sm font-mono outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             autoFocus
           />
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPasteHtmlOpen(false); setPasteHtmlInput(""); }}>Cancel</Button>
+            <Button variant="outline" onClick={closePasteHtml}>
+              {pasteHtmlLog.length > 0 ? "Done" : "Cancel"}
+            </Button>
             <Button onClick={importFromPastedHtml} disabled={pasteHtmlImporting || !pasteHtmlInput.trim()}>
-              {pasteHtmlImporting ? "Importing..." : "Import"}
+              {pasteHtmlImporting ? "Importing…" : "Import race"}
             </Button>
           </DialogFooter>
         </DialogContent>
