@@ -8,13 +8,16 @@ function msg(text, type = "info") {
   return `<div class="msg ${type}">${text}</div>`;
 }
 
-function isOnMrcPage(url) {
+function isMrcHost(url) {
   try {
     const h = new URL(url).hostname;
     return h === "maltaracingclub.com" || h === "www.maltaracingclub.com";
-  } catch {
-    return false;
-  }
+  } catch { return false; }
+}
+
+function isMeetingPage(url) {
+  try { return new URL(url).pathname.includes("meeting.php"); }
+  catch { return false; }
 }
 
 function formatDate(d) {
@@ -23,26 +26,21 @@ function formatDate(d) {
 }
 
 async function getToken() {
-  // 1. Try cached token
   const cached = await chrome.storage.session.get("mrc_token");
   if (cached.mrc_token) return cached.mrc_token;
 
-  // 2. Try to extract from app tab (if open)
   const appTabs = await chrome.tabs.query({ url: APP + "/*" });
-  if (appTabs.length === 0) return null;
+  if (!appTabs.length) return null;
 
   const results = await chrome.scripting.executeScript({
     target: { tabId: appTabs[0].id },
     func: () => {
       const key = Object.keys(localStorage).find(
-        (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+        k => k.startsWith("sb-") && k.endsWith("-auth-token")
       );
       if (!key) return null;
-      try {
-        return JSON.parse(localStorage.getItem(key) || "{}")?.access_token ?? null;
-      } catch {
-        return null;
-      }
+      try { return JSON.parse(localStorage.getItem(key) || "{}")?.access_token ?? null; }
+      catch { return null; }
     },
   });
 
@@ -51,11 +49,59 @@ async function getToken() {
   return token;
 }
 
+// Extract race URLs from a meeting page DOM
+function extractRaceUrlsFromPage() {
+  const divs = document.querySelectorAll(".race[onclick]");
+  const urls = [];
+  divs.forEach(div => {
+    const match = div.getAttribute("onclick").match(/race\.php\?id=(\d+)/);
+    if (match) urls.push(`https://maltaracingclub.com/race.php?id=${match[1]}`);
+  });
+  return urls;
+}
+
+// Wait for a tab to finish navigating
+function waitForTabLoad(tabId) {
+  return new Promise((resolve) => {
+    let navigating = false;
+    const listener = (id, changeInfo) => {
+      if (id !== tabId) return;
+      if (changeInfo.status === "loading") navigating = true;
+      if (navigating && changeInfo.status === "complete") {
+        chrome.tabs.onUpdated.removeListener(listener);
+        setTimeout(resolve, 1000); // let page settle
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+async function getHtmlFromTab(tabId) {
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => document.documentElement.outerHTML,
+  });
+  return result;
+}
+
+async function callFullImport(html, meetingId, token) {
+  const res = await fetch(`${APP}/api/mrc-full-import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ html, meetingId }),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.error || "Import failed.");
+  return result;
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 async function main() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  if (!isOnMrcPage(tab.url)) {
-    render(msg("Navigate to an MRC race page first."));
+  if (!isMrcHost(tab.url)) {
+    render(msg("Navigate to an MRC meeting or race page first."));
     return;
   }
 
@@ -63,14 +109,11 @@ async function main() {
 
   const token = await getToken();
   if (!token) {
-    render(msg(
-      `Please open the <a href="${APP}" target="_blank">MRC System</a> in another tab and make sure you're logged in, then come back here.`,
-      "err"
-    ));
+    render(msg(`Please open the <a href="${APP}" target="_blank">MRC System</a> in another tab and make sure you're logged in, then try again.`, "err"));
     return;
   }
 
-  // Fetch meetings
+  // Fetch meetings list
   let meetings = [];
   try {
     const res = await fetch(`${APP}/api/meetings`, {
@@ -88,64 +131,109 @@ async function main() {
     return;
   }
 
-  if (meetings.length === 0) {
+  if (!meetings.length) {
     render(msg("No meetings found. Create one in the app first."));
     return;
   }
 
   const options = meetings
-    .map((m) => {
-      const label = m.title || `Meeting ${formatDate(m.meeting_date)}`;
-      return `<option value="${m.id}">${label}</option>`;
-    })
+    .map(m => `<option value="${m.id}">${m.title || "Meeting " + formatDate(m.meeting_date)}</option>`)
     .join("");
 
-  render(`
-    <select id="meeting">${options}</select>
-    <button id="btn">Import race</button>
-    <div id="status"></div>
-  `);
+  const onMeetingPage = isMeetingPage(tab.url);
 
-  document.getElementById("btn").addEventListener("click", async () => {
-    const meetingId = document.getElementById("meeting").value;
-    const btn = document.getElementById("btn");
-    const statusEl = document.getElementById("status");
+  if (onMeetingPage) {
+    // Extract race URLs from this meeting page
+    const [{ result: raceUrls }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractRaceUrlsFromPage,
+    });
 
-    btn.disabled = true;
-    btn.textContent = "Importing…";
-    statusEl.innerHTML = "";
-
-    try {
-      // Read HTML from the active MRC tab
-      const [{ result: html }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => document.documentElement.outerHTML,
-      });
-
-      const res = await fetch(`${APP}/api/mrc-full-import`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ html, meetingId }),
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Import failed.");
-
-      statusEl.innerHTML = msg(
-        `✓ Race ${result.raceNumber} — ${result.importedCount} entries imported`,
-        "ok"
-      );
-      btn.textContent = "Import another race";
-      btn.disabled = false;
-    } catch (e) {
-      statusEl.innerHTML = msg(`✗ ${e.message}`, "err");
-      btn.textContent = "Import race";
-      btn.disabled = false;
+    if (!raceUrls || raceUrls.length === 0) {
+      render(msg("No races found on this page."));
+      return;
     }
-  });
+
+    render(`
+      <select id="meeting">${options}</select>
+      <button id="btn">Import all ${raceUrls.length} races</button>
+      <div id="log"></div>
+    `);
+
+    document.getElementById("btn").addEventListener("click", async () => {
+      const meetingId = document.getElementById("meeting").value;
+      const btn = document.getElementById("btn");
+      const log = document.getElementById("log");
+
+      btn.disabled = true;
+      log.innerHTML = msg("Opening background tab…");
+
+      // Open a background tab with the first race URL
+      const bgTab = await new Promise(resolve =>
+        chrome.tabs.create({ url: raceUrls[0], active: false }, resolve)
+      );
+
+      let logHtml = "";
+      const addLog = (line, type = "info") => {
+        logHtml += `<div class="msg ${type}" style="margin-top:6px">${line}</div>`;
+        log.innerHTML = logHtml;
+      };
+
+      try {
+        for (let i = 0; i < raceUrls.length; i++) {
+          const url = raceUrls[i];
+          btn.textContent = `Importing… (${i + 1}/${raceUrls.length})`;
+
+          // Navigate (first URL already loaded from tab creation)
+          if (i > 0) {
+            await new Promise(resolve => chrome.tabs.update(bgTab.id, { url }, resolve));
+          }
+          await waitForTabLoad(bgTab.id);
+
+          try {
+            const html = await getHtmlFromTab(bgTab.id);
+            const result = await callFullImport(html, meetingId, token);
+            addLog(`✓ Race ${result.raceNumber} — ${result.importedCount} entries`, "ok");
+          } catch (e) {
+            addLog(`✗ Race ${i + 1}: ${e.message}`, "err");
+          }
+        }
+      } finally {
+        chrome.tabs.remove(bgTab.id);
+        btn.textContent = "Done";
+      }
+    });
+
+  } else {
+    // Race page — import just this race
+    render(`
+      <select id="meeting">${options}</select>
+      <button id="btn">Import this race</button>
+      <div id="status"></div>
+    `);
+
+    document.getElementById("btn").addEventListener("click", async () => {
+      const meetingId = document.getElementById("meeting").value;
+      const btn = document.getElementById("btn");
+      const statusEl = document.getElementById("status");
+
+      btn.disabled = true;
+      btn.textContent = "Importing…";
+      statusEl.innerHTML = "";
+
+      try {
+        const html = await getHtmlFromTab(tab.id);
+        const result = await callFullImport(html, meetingId, token);
+        statusEl.innerHTML = msg(`✓ Race ${result.raceNumber} — ${result.importedCount} entries`, "ok");
+        btn.textContent = "Import another race";
+        btn.disabled = false;
+      } catch (e) {
+        statusEl.innerHTML = msg(`✗ ${e.message}`, "err");
+        btn.textContent = "Import this race";
+        btn.disabled = false;
+      }
+    });
+  }
 }
 
 main();
