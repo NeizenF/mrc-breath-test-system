@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  stripTags,
+  parseRaceNumber,
+  parseRaceTime,
+  parseRaceDistance,
+  parseRaceClass,
+  parseRaceName,
+  parseQualifiers,
+  parseEntriesFromText,
+} from "@/lib/mrcParser";
 
 // Simple in-memory rate limiter (resets on cold start)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -20,230 +30,8 @@ function checkRateLimit(ip: string): boolean {
 
 const ALLOWED_HOSTNAMES = ["maltaracingclub.com", "www.maltaracingclub.com"];
 
-type ParsedEntry = {
-  gate: number;
-  horse_name: string;
-  driver_name_raw: string | null;
-  scratched: boolean;
-};
-
-function decodeHtml(text: string) {
-  return text
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&#39;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">");
-}
-
-function stripTags(html: string) {
-  return decodeHtml(
-    html
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/p>/gi, "\n")
-      .replace(/<\/div>/gi, "\n")
-      .replace(/<\/tr>/gi, "\n")
-      .replace(/<\/li>/gi, "\n")
-      .replace(/<\/td>/gi, " ")
-      .replace(/<[^>]+>/g, "")
-  );
-}
-
-function normalizeSpaces(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function parseRaceNumber(html: string, text: string): number | null {
-  // Try title tag first (most reliable)
-  const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  if (titleMatch) {
-    const t = titleMatch[1];
-    const m = t.match(/Race\s+(\d+)/i) || t.match(/(\d+)/);
-    if (m) return Number(m[1]);
-  }
-  // Try common text patterns
-  const match =
-    text.match(/Meeting\s+\d+\s*-\s*Race\s+(\d+)/i) ||
-    text.match(/Race\s+No\.?\s*(\d+)/i) ||
-    text.match(/Race\s+#\s*(\d+)/i) ||
-    text.match(/\bRace\s+(\d+)\b/i) ||
-    text.match(/\bRACE\s+(\d+)\b/i);
-  return match ? Number(match[1]) : null;
-}
-
-function cleanDriverName(value: string | null): string | null {
-  if (!value) return null;
-
-  let v = normalizeSpaces(value);
-
-  v = v.replace(/^Driver:\s*/i, "").trim();
-  v = v.replace(/\s{2,}/g, " ").trim();
-
-  if (!v) return null;
-  if (/NOT DECLARED/i.test(v)) return null;
-  if (/SCRATCHED/i.test(v)) return null;
-
-  return v;
-}
-
-function parseEntriesFromText(text: string): ParsedEntry[] {
-  const cleaned = text.replace(/\r/g, "");
-
-  const startRegex =
-    /(?:^|\n)\s*(\d+)\s+(.+?)\s*-\s*\([A-Z]{2,3}\)\s*-\s*[A-Z]\/\d+yrs/gi;
-
-  const starts: Array<{
-    index: number;
-    gate: number;
-    horse_name: string;
-  }> = [];
-
-  let match: RegExpExecArray | null;
-
-  while ((match = startRegex.exec(cleaned)) !== null) {
-    starts.push({
-      index: match.index,
-      gate: Number(match[1]),
-      horse_name: normalizeSpaces(match[2]),
-    });
-  }
-
-  const entries: ParsedEntry[] = [];
-
-  for (let i = 0; i < starts.length; i++) {
-    const current = starts[i];
-    const next = starts[i + 1];
-
-    const block = cleaned.slice(
-      current.index,
-      next ? next.index : cleaned.length
-    );
-
-    let scratched =
-      /(?:^|\n)\s*SCRATCHED\s*(?:\n|$)/i.test(block) ||
-      /\bSCRATCHED\b/i.test(block);
-
-    let driver_name_raw: string | null = null;
-
-    if (!scratched) {
-      const driverMatch = block.match(/Driver:\s*([^\n]+)/i);
-      if (driverMatch?.[1]) {
-        const driverText = normalizeSpaces(driverMatch[1]);
-        if (/SCRATCHED/i.test(driverText)) {
-          // Driver field explicitly says SCRATCHED
-          scratched = true;
-        } else {
-          driver_name_raw = cleanDriverName(driverMatch[1]);
-        }
-      }
-    }
-
-    entries.push({
-      gate: current.gate,
-      horse_name: current.horse_name,
-      driver_name_raw,
-      scratched,
-    });
-  }
-
-  return entries;
-}
-
-function parseRaceTime(text: string): string | null {
-  const cleaned = text.replace(/\r/g, "");
-
-  const patterns = [
-    /\bTime:\s*([^\n]+)/i,
-    /\bStart\s*Time\s*[:\-]?\s*([0-2]?\d[:.][0-5]\d(?:\s*[ap]m)?)\b/i,
-    /\bRace\s*Time\s*[:\-]?\s*([0-2]?\d[:.][0-5]\d(?:\s*[ap]m)?)\b/i,
-    /\b([0-2]?\d[:.][0-5]\d(?:\s*[ap]m))\b/i,
-    /\b([0-2]?\d[:.][0-5]\d)\b/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = cleaned.match(pattern);
-    if (match?.[1]) {
-      return normalizeSpaces(match[1]).replace(/\./g, ":");
-    }
-  }
-
-  return null;
-}
-
-function parseRaceDistance(text: string): string | null {
-  const cleaned = text.replace(/\r/g, "");
-
-  const patterns = [
-    /\bDistance:\s*(\d{3,5}\s*(?:m|metres?))\b/i,
-    /\bDistance\s*[:\-]?\s*(\d{3,5}\s?m)\b/i,
-    /\b(\d{3,5}\s?m)\b/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = cleaned.match(pattern);
-    if (match?.[1]) {
-      return normalizeSpaces(match[1])
-        .replace(/metres?/i, "m")
-        .replace(/\s*m$/i, "m");
-    }
-  }
-
-  return null;
-}
-
-function parseRaceClass(text: string): string | null {
-  const cleaned = text.replace(/\r/g, "");
-
-  const patterns = [
-    /\bClass\s+([A-Za-z0-9+\- ]{1,50})/i,
-    /\bClass\s*[:\-]?\s*([A-Za-z0-9+\- ]{1,50})/i,
-    /\bCategory\s*[:\-]?\s*([A-Za-z0-9+\- ]{1,50})/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = cleaned.match(pattern);
-    if (match?.[1]) {
-      const value = normalizeSpaces(match[1])
-        .split("\n")[0]
-        .trim()
-        .replace(/[|•]+$/g, "")
-        .trim();
-
-      if (value) return value;
-    }
-  }
-
-  return null;
-}
-
-function parseRaceName(text: string): string | null {
-  const cleaned = text.replace(/\r/g, "");
-  // Match a line containing heat/semi-final/final/championship keywords
-  const m = cleaned.match(
-    /^[ \t]*([^\n]{5,120}(?:heat|semi[\s-]?final|final|championship|qualifier|trophy|cup|plate)[^\n]{0,80})$/mi
-  );
-  if (m?.[1]) return normalizeSpaces(m[1]).trim();
-  return null;
-}
-
-function parseQualifiers(text: string): { count: number; nextStage: string } | null {
-  const cleaned = text.replace(/\r/g, "");
-  const m = cleaned.match(/(\d+)\s+to\s+Qualify(?:\s+for\s+(.+?))?[\r\n]/i);
-  if (m?.[1]) {
-    return {
-      count: parseInt(m[1]),
-      nextStage: normalizeSpaces(m[2] ?? "").trim(),
-    };
-  }
-  return null;
-}
-
 export async function POST(req: Request) {
   try {
-    // Rate limiting
     const ip =
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
       req.headers.get("x-real-ip") ??
@@ -256,7 +44,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Auth check — client must send Authorization: Bearer <access_token>
     const authHeader = req.headers.get("Authorization");
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
@@ -281,13 +68,11 @@ export async function POST(req: Request) {
     let html: string;
 
     if (pastedHtml) {
-      // Use pasted HTML directly — no fetch needed
       if (pastedHtml.trim().length < 100) {
         return NextResponse.json({ error: "Pasted HTML is too short to be valid." }, { status: 400 });
       }
       html = pastedHtml;
     } else if (url) {
-      // Validate that URL is from the MRC domain
       try {
         const parsed = new URL(url);
         if (!ALLOWED_HOSTNAMES.includes(parsed.hostname)) {
@@ -305,21 +90,8 @@ export async function POST(req: Request) {
         redirect: "follow",
         headers: {
           "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-          "accept-language": "en-GB,en;q=0.9,mt;q=0.8",
-          "accept-encoding": "gzip, deflate, br",
-          "referer": "https://maltaracingclub.com/",
-          "origin": "https://maltaracingclub.com",
-          "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-          "sec-ch-ua-mobile": "?0",
-          "sec-ch-ua-platform": '"Windows"',
-          "sec-fetch-dest": "document",
-          "sec-fetch-mode": "navigate",
-          "sec-fetch-site": "same-origin",
-          "sec-fetch-user": "?1",
-          "upgrade-insecure-requests": "1",
-          "cache-control": "max-age=0",
-          "connection": "keep-alive",
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "accept-language": "en-GB,en;q=0.9",
         },
       });
 
@@ -334,6 +106,7 @@ export async function POST(req: Request) {
     } else {
       return NextResponse.json({ error: "Provide either a URL or pasted HTML." }, { status: 400 });
     }
+
     const text = stripTags(html);
 
     if (/does not exist in our database/i.test(text)) {
