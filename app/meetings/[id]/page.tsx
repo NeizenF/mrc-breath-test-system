@@ -224,10 +224,10 @@ export default function MeetingDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
 
-  // Detect Chrome extension
+  // Detect Chrome extension via DOM attribute set by content script
   useEffect(() => {
     const check = () => {
-      const id = (window as unknown as { mrcExtensionId?: string }).mrcExtensionId;
+      const id = document.documentElement.getAttribute("data-mrc-extension-id");
       if (id) setExtensionId(id);
     };
     check();
