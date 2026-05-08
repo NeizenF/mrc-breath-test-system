@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
-import { importMrcUrl } from "@/lib/importMrcUrl";
 
 function parseRaceDateTime(meetingDate: string, raceTime: string): Date | null {
   const t = raceTime.trim();
@@ -167,6 +166,7 @@ export default function RaceDayPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const syncingRef = useRef(false);
+  const [extensionId, setExtensionId] = useState<string | null>(null);
   // Race timer
   const [timerPos, setTimerPos] = useState<{ x: number; y: number } | null>(null);
   const [timerVisible, setTimerVisible] = useState(false);
@@ -810,6 +810,40 @@ export default function RaceDayPage() {
   // Reset when search changes — no scroll, just reset position
   useEffect(() => { setMatchIndex(-1); }, [search]);
 
+  // Detect Chrome extension
+  useEffect(() => {
+    const check = () => {
+      const id = document.documentElement.getAttribute("data-mrc-extension-id");
+      if (id) setExtensionId(id);
+    };
+    check();
+    const t = setTimeout(check, 500);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Listen for progress events from extension — show as toasts
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail.event === "race-done") {
+        toast.success(`✓ Race ${detail.raceNumber} — ${detail.importedCount} entries`);
+      } else if (detail.event === "race-error") {
+        toast.error(`Race ${detail.index + 1}: ${detail.message}`);
+      } else if (detail.event === "done") {
+        setSyncing(false);
+        syncingRef.current = false;
+        reloadEverything();
+      } else if (detail.event === "error") {
+        toast.error(detail.message);
+        setSyncing(false);
+        syncingRef.current = false;
+      }
+    };
+    window.addEventListener("mrc-import-progress", handler);
+    return () => window.removeEventListener("mrc-import-progress", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && matchingEntryIds.length > 0) {
       e.preventDefault();
@@ -837,32 +871,32 @@ export default function RaceDayPage() {
   }
 
   async function syncFromMrc() {
+    if (!extensionId) {
+      toast.error("Install the MRC extension to use sync.");
+      return;
+    }
+    const { data: m } = await supabase
+      .from("meetings").select("import_urls").eq("id", meetingId).single();
+    const meetingUrl = (m as { import_urls: string | null })?.import_urls?.trim() ?? "";
+    if (!meetingUrl) {
+      toast.error("No MRC meeting URL saved. Set it on the meeting page first.");
+      return;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) { toast.error("Not logged in."); return; }
+
     setSyncing(true);
     syncingRef.current = true;
-    try {
-      const { data: m } = await supabase
-        .from("meetings").select("import_urls").eq("id", meetingId).single();
-      const fromDb = (m as { import_urls: string | null })?.import_urls ?? "";
-      const fromLocal = localStorage.getItem(`bulk-mrc-urls-${meetingId}`) ?? "";
-      const raw = fromDb || fromLocal;
-      const urls = raw.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-      if (urls.length === 0) {
-        toast.error("No saved links for this meeting. Add them on the Import page first.");
-        return;
-      }
-      const results: string[] = [];
-      for (const url of urls) {
-        const r = await importMrcUrl(url, meetingId);
-        results.push(`Race ${r.raceNumber}`);
-      }
-      await reloadEverything();
-      toast.success(`Synced: ${results.join(", ")}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Sync failed.");
-    } finally {
-      syncingRef.current = false;
-      setSyncing(false);
-    }
+    toast.info("Syncing from MRC…");
+
+    (window as unknown as { chrome: { runtime: { sendMessage: (id: string, msg: unknown) => void } } })
+      .chrome.runtime.sendMessage(extensionId, {
+        type: "import-meeting",
+        meetingUrl,
+        meetingId,
+        token,
+      });
   }
 
   function handleMeetingChange(nextMeetingId: string) {

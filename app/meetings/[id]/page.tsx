@@ -34,21 +34,15 @@ type Race = {
   race_class: string | null;
 };
 
-
 export default function MeetingDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const meetingId = params.id;
-  const bulkUrlsStorageKey = `bulk-mrc-urls-${meetingId}`;
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [races, setRaces] = useState<Race[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingMrc, setUpdatingMrc] = useState(false);
-  const [bulkImporting, setBulkImporting] = useState(false);
-  const [bulkUrls, setBulkUrls] = useState(() =>
-    typeof window !== "undefined" ? (localStorage.getItem(`bulk-mrc-urls-${meetingId}`) ?? "") : ""
-  );
   const [urlsReady, setUrlsReady] = useState(false);
   const [createRacesOpen, setCreateRacesOpen] = useState(false);
   const [createRacesInput, setCreateRacesInput] = useState("");
@@ -60,12 +54,9 @@ export default function MeetingDetailPage() {
   const [pasteHtmlLog, setPasteHtmlLog] = useState<{ race: number; count: number; error?: string }[]>([]);
 
   const [extensionId, setExtensionId] = useState<string | null>(null);
-  const [syncOpen, setSyncOpen] = useState(false);
   const [syncRunning, setSyncRunning] = useState(false);
   const [syncLog, setSyncLog] = useState<{ text: string; ok: boolean }[]>([]);
-  const [mrcMeetingUrl, setMrcMeetingUrl] = useState(() =>
-    typeof window !== "undefined" ? (localStorage.getItem(`mrc-meeting-url-${meetingId}`) ?? "") : ""
-  );
+  const [mrcMeetingUrl, setMrcMeetingUrl] = useState("");
 
   async function load() {
     setLoading(true);
@@ -97,13 +88,7 @@ export default function MeetingDetailPage() {
     const mtg = (m as Meeting) || null;
     setMeeting(mtg);
     setRaces((r as Race[]) || []);
-    // Supabase is source of truth; fall back to localStorage if column is empty
-    if (mtg?.import_urls != null) {
-      setBulkUrls(mtg.import_urls);
-    } else {
-      const local = localStorage.getItem(bulkUrlsStorageKey);
-      if (local) setBulkUrls(local);
-    }
+    setMrcMeetingUrl(mtg?.import_urls ?? "");
     setUrlsReady(true);
     setLoading(false);
   }
@@ -121,10 +106,7 @@ export default function MeetingDetailPage() {
     const existing = new Set(races.map((x) => x.race_number));
     const toInsert = Array.from({ length: n }, (_, i) => i + 1)
       .filter((num) => !existing.has(num))
-      .map((num) => ({
-        meeting_id: meetingId,
-        race_number: num,
-      }));
+      .map((num) => ({ meeting_id: meetingId, race_number: num }));
 
     if (toInsert.length === 0) {
       toast.error("Those races already exist.");
@@ -132,11 +114,7 @@ export default function MeetingDetailPage() {
     }
 
     const { error } = await supabase.from("races").insert(toInsert);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
+    if (error) { toast.error(error.message); return; }
     await load();
   }
 
@@ -166,59 +144,43 @@ export default function MeetingDetailPage() {
     setSingleMrcOpen(false);
     setSingleMrcInput("");
     setUpdatingMrc(true);
-
     try {
       const result = await importMrcUrl(url, meetingId);
       await load();
       toast.success(`Imported ${result.importedCount} entries for race ${result.raceNumber}.`);
     } catch (error) {
-      console.error(error);
       toast.error(error instanceof Error ? error.message : "Import failed.");
     } finally {
       setUpdatingMrc(false);
     }
   }
 
-  async function bulkUpdateFromMrc() {
-    const urls = bulkUrls
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+  async function startSync() {
+    if (!extensionId || !mrcMeetingUrl.trim()) return;
+    setSyncRunning(true);
+    setSyncLog([{ text: "Starting…", ok: true }]);
 
-    if (urls.length === 0) {
-      toast.error("Paste at least one race link.");
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
+      setSyncLog([{ text: "✗ Not logged in.", ok: false }]);
+      setSyncRunning(false);
       return;
     }
 
-    setBulkImporting(true);
-    await saveUrlsToSupabase();
-
-    try {
-      const results: string[] = [];
-
-      for (const url of urls) {
-        const result = await importMrcUrl(url, meetingId);
-        results.push(`Race ${result.raceNumber}: ${result.importedCount} entries`);
-      }
-
-      await load();
-      toast.success(`Bulk import complete. ${results.join(", ")}`);
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : "Bulk import failed.");
-    } finally {
-      setBulkImporting(false);
-    }
+    (window as unknown as { chrome: { runtime: { sendMessage: (id: string, msg: unknown) => void } } })
+      .chrome.runtime.sendMessage(extensionId, {
+        type: "import-meeting",
+        meetingUrl: mrcMeetingUrl.trim(),
+        meetingId,
+        token,
+      });
   }
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        router.replace("/login");
-        return;
-      }
-
+      if (!data.user) { router.replace("/login"); return; }
       await load();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -243,19 +205,12 @@ export default function MeetingDetailPage() {
         setSyncLog([{ text: `Found ${detail.total} races — importing…`, ok: true }]);
       } else if (detail.event === "race-done") {
         setSyncLog((prev) => [...prev, { text: `✓ Race ${detail.raceNumber} — ${detail.importedCount} entries`, ok: true }]);
-        if (detail.index === detail.total - 1) {
-          setSyncRunning(false);
-          load();
-        }
+        if (detail.index === detail.total - 1) { setSyncRunning(false); load(); }
       } else if (detail.event === "race-error") {
         setSyncLog((prev) => [...prev, { text: `✗ Race ${detail.index + 1}: ${detail.message}`, ok: false }]);
-        if (detail.index === detail.total - 1) {
-          setSyncRunning(false);
-          load();
-        }
+        if (detail.index === detail.total - 1) { setSyncRunning(false); load(); }
       } else if (detail.event === "done") {
-        setSyncRunning(false);
-        load();
+        setSyncRunning(false); load();
       } else if (detail.event === "error") {
         setSyncLog((prev) => [...prev, { text: `✗ ${detail.message}`, ok: false }]);
         setSyncRunning(false);
@@ -266,45 +221,14 @@ export default function MeetingDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function startSync() {
-    if (!extensionId || !mrcMeetingUrl.trim()) return;
-    setSyncRunning(true);
-    setSyncLog([{ text: "Starting…", ok: true }]);
-    localStorage.setItem(`mrc-meeting-url-${meetingId}`, mrcMeetingUrl.trim());
-
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) {
-      setSyncLog([{ text: "✗ Not logged in.", ok: false }]);
-      setSyncRunning(false);
-      return;
-    }
-
-    (window as unknown as { chrome: { runtime: { sendMessage: (id: string, msg: unknown) => void } } })
-      .chrome.runtime.sendMessage(extensionId, {
-        type: "import-meeting",
-        meetingUrl: mrcMeetingUrl.trim(),
-        meetingId,
-        token,
-      });
-  }
-
-  // Save to localStorage immediately + sync to Supabase after 400ms idle.
-  // urlsReady gates this so the initial empty render doesn't wipe saved data.
+  // Save meeting URL to Supabase after 500ms idle
   useEffect(() => {
-    if (!meetingId || !urlsReady) return;
-    localStorage.setItem(bulkUrlsStorageKey, bulkUrls);
+    if (!urlsReady) return;
     const t = setTimeout(async () => {
-      const { error } = await supabase.from("meetings").update({ import_urls: bulkUrls }).eq("id", meetingId);
-      if (error) console.error("Failed to save import URLs to Supabase:", error);
-    }, 400);
+      await supabase.from("meetings").update({ import_urls: mrcMeetingUrl }).eq("id", meetingId);
+    }, 500);
     return () => clearTimeout(t);
-  }, [bulkUrls, meetingId, bulkUrlsStorageKey, urlsReady]);
-
-  async function saveUrlsToSupabase() {
-    const { error } = await supabase.from("meetings").update({ import_urls: bulkUrls }).eq("id", meetingId);
-    if (error) console.error("Failed to save import URLs:", error);
-  }
+  }, [mrcMeetingUrl, meetingId, urlsReady]);
 
   const title = useMemo(() => {
     if (!meeting) return "Meeting";
@@ -323,87 +247,62 @@ export default function MeetingDetailPage() {
           <div>
             <h1 className="text-2xl font-semibold">{title}</h1>
             <p className="text-sm text-muted-foreground">
-              {meeting?.meeting_date
-                ? `Date: ${formatDateLong(meeting.meeting_date)}`
-                : "—"}
+              {meeting?.meeting_date ? `Date: ${formatDateLong(meeting.meeting_date)}` : "—"}
             </p>
           </div>
 
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => router.push("/")}>
-              Home
-            </Button>
-
-            <Button variant="outline" onClick={() => router.push("/admin/meetings")}>
-              Meetings
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => setSingleMrcOpen(true)}
-              disabled={updatingMrc || bulkImporting}
-            >
+          <div className="flex gap-2 flex-wrap justify-end">
+            <Button variant="outline" onClick={() => router.push("/admin/meetings")}>Meetings</Button>
+            <Button variant="outline" onClick={() => setSingleMrcOpen(true)} disabled={updatingMrc}>
               {updatingMrc ? "Updating..." : "Update one race"}
             </Button>
-
-            <Button
-              variant="outline"
-              onClick={() => setPasteHtmlOpen(true)}
-              disabled={updatingMrc || bulkImporting || pasteHtmlImporting}
-            >
+            <Button variant="outline" onClick={() => setPasteHtmlOpen(true)} disabled={pasteHtmlImporting}>
               Paste page source
             </Button>
-
-            {extensionId && (
-              <Button
-                variant="outline"
-                onClick={() => { setSyncLog([]); setSyncOpen(true); }}
-                disabled={syncRunning}
-              >
-                {syncRunning ? "Syncing…" : "Sync from MRC"}
-              </Button>
-            )}
-
             <Button onClick={() => setCreateRacesOpen(true)}>Create races</Button>
-
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/meetings/${meetingId}/print`)}
-            >
+            <Button variant="outline" onClick={() => router.push(`/meetings/${meetingId}/print`)}>
               Print page
             </Button>
           </div>
         </div>
 
+        {/* Sync from MRC card */}
         <Card>
           <CardHeader>
-            <CardTitle>Bulk import from MRC</CardTitle>
+            <CardTitle>Sync races from MRC</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Paste one MRC race link per line. Links are saved and sync across all devices.
+              Paste the MRC meeting page URL. It&apos;s saved automatically and used to sync race entries via the extension.
             </p>
 
-            <textarea
-              value={bulkUrls}
-              onChange={(e) => setBulkUrls(e.target.value)}
-              placeholder={`https://maltaracingclub.com/...\nhttps://maltaracingclub.com/...\nhttps://maltaracingclub.com/...`}
-              className="min-h-[140px] w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            <Input
+              type="url"
+              placeholder="https://maltaracingclub.com/meeting.php?id=..."
+              value={mrcMeetingUrl}
+              onChange={(e) => setMrcMeetingUrl(e.target.value)}
+              disabled={syncRunning}
             />
 
-            <div className="flex gap-2">
-              <Button onClick={bulkUpdateFromMrc} disabled={bulkImporting || updatingMrc}>
-                {bulkImporting ? "Importing..." : "Import all links"}
-              </Button>
+            {syncLog.length > 0 && (
+              <div className="rounded-md border bg-muted/40 px-3 py-2 space-y-1 max-h-40 overflow-y-auto">
+                {syncLog.map((entry, i) => (
+                  <p key={i} className={`text-sm ${entry.ok ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+                    {entry.text}
+                  </p>
+                ))}
+              </div>
+            )}
 
-              <Button
-                variant="outline"
-                onClick={() => setBulkUrls("")}
-                disabled={bulkImporting}
-              >
-                Clear
+            {extensionId ? (
+              <Button onClick={startSync} disabled={syncRunning || !mrcMeetingUrl.trim()}>
+                {syncRunning ? "Syncing…" : "Sync all races"}
               </Button>
-            </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Install the MRC Chrome extension to enable one-click sync.
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -412,13 +311,11 @@ export default function MeetingDetailPage() {
             <CardTitle>Races</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            {loading && (
-              <span className="text-sm text-muted-foreground">Loading…</span>
-            )}
+            {loading && <span className="text-sm text-muted-foreground">Loading…</span>}
 
             {!loading && races.length === 0 && (
               <span className="text-sm text-muted-foreground">
-                No races yet. Click “Create races” or import from MRC.
+                No races yet. Click &quot;Create races&quot; or sync from MRC.
               </span>
             )}
 
@@ -427,22 +324,15 @@ export default function MeetingDetailPage() {
                 key={r.id}
                 variant="secondary"
                 className="h-auto justify-between py-3"
-                onClick={() =>
-                  router.push(`/meetings/${meetingId}/raceday?race=${r.race_number}`)
-                }
+                onClick={() => router.push(`/meetings/${meetingId}/raceday?race=${r.race_number}`)}
               >
                 <div className="flex flex-col items-start text-left">
                   <span className="font-medium">Race {r.race_number}</span>
                   <span className="text-xs text-muted-foreground">
-                    {[r.race_time, r.race_distance, r.race_class]
-                      .filter(Boolean)
-                      .join(" • ") || "No extra info yet"}
+                    {[r.race_time, r.race_distance, r.race_class].filter(Boolean).join(" • ") || "No extra info yet"}
                   </span>
                 </div>
-
-                <span className="ml-2 rounded-md border px-2 py-1 text-xs">
-                  Open
-                </span>
+                <span className="ml-2 rounded-md border px-2 py-1 text-xs">Open</span>
               </Button>
             ))}
           </CardContent>
@@ -457,10 +347,7 @@ export default function MeetingDetailPage() {
             <DialogDescription>How many races? (1–30)</DialogDescription>
           </DialogHeader>
           <Input
-            type="number"
-            min={1}
-            max={30}
-            placeholder="e.g. 10"
+            type="number" min={1} max={30} placeholder="e.g. 10"
             value={createRacesInput}
             onChange={(e) => setCreateRacesInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") createRaces(createRacesInput); }}
@@ -481,8 +368,7 @@ export default function MeetingDetailPage() {
             <DialogDescription>Paste the MRC race link below.</DialogDescription>
           </DialogHeader>
           <Input
-            type="url"
-            placeholder="https://maltaracingclub.com/..."
+            type="url" placeholder="https://maltaracingclub.com/..."
             value={singleMrcInput}
             onChange={(e) => setSingleMrcInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && singleMrcInput.trim()) updateFromMrc(singleMrcInput.trim()); }}
@@ -492,45 +378,6 @@ export default function MeetingDetailPage() {
             <Button variant="outline" onClick={() => { setSingleMrcOpen(false); setSingleMrcInput(""); }}>Cancel</Button>
             <Button onClick={() => singleMrcInput.trim() && updateFromMrc(singleMrcInput.trim())} disabled={updatingMrc}>
               {updatingMrc ? "Importing..." : "Import"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Sync from MRC dialog */}
-      <Dialog open={syncOpen} onOpenChange={(o) => { if (!o && !syncRunning) { setSyncOpen(false); setSyncLog([]); } }}>
-        <DialogContent showCloseButton={false} className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Sync from MRC</DialogTitle>
-            <DialogDescription>
-              Paste the MRC meeting page URL. The extension will open it in the background and import all races automatically.
-            </DialogDescription>
-          </DialogHeader>
-
-          <Input
-            type="url"
-            placeholder="https://maltaracingclub.com/meeting.php?id=..."
-            value={mrcMeetingUrl}
-            onChange={(e) => setMrcMeetingUrl(e.target.value)}
-            disabled={syncRunning}
-          />
-
-          {syncLog.length > 0 && (
-            <div className="rounded-md border bg-muted/40 px-3 py-2 space-y-1 max-h-48 overflow-y-auto">
-              {syncLog.map((entry, i) => (
-                <p key={i} className={`text-sm ${entry.ok ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
-                  {entry.text}
-                </p>
-              ))}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setSyncOpen(false); setSyncLog([]); }} disabled={syncRunning}>
-              {syncLog.some(e => e.text.startsWith("✓")) ? "Done" : "Cancel"}
-            </Button>
-            <Button onClick={startSync} disabled={syncRunning || !mrcMeetingUrl.trim()}>
-              {syncRunning ? "Syncing…" : "Sync all races"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -551,7 +398,6 @@ export default function MeetingDetailPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Log of imported races */}
           {pasteHtmlLog.length > 0 && (
             <div className="rounded-md border bg-muted/40 px-3 py-2 space-y-1">
               {pasteHtmlLog.map((entry, i) =>
