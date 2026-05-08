@@ -61,10 +61,8 @@ chrome.runtime.onMessageExternal.addListener((message, sender) => {
       await sendProgress(senderTabId, { event: "start", total: raceUrls.length });
 
       for (let i = 0; i < raceUrls.length; i++) {
-        if (i > 0) {
-          await new Promise((resolve) => chrome.tabs.update(bgTab.id, { url: raceUrls[i] }, resolve));
-          await waitForTabLoad(bgTab.id);
-        }
+        await new Promise((resolve) => chrome.tabs.update(bgTab.id, { url: raceUrls[i] }, resolve));
+        await waitForTabLoad(bgTab.id);
 
         try {
           const [{ result: html }] = await chrome.scripting.executeScript({

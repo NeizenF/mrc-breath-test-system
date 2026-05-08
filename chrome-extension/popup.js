@@ -170,7 +170,7 @@ async function main() {
 
       // Open a background tab with the first race URL
       const bgTab = await new Promise(resolve =>
-        chrome.tabs.create({ url: raceUrls[0], active: false }, resolve)
+        chrome.tabs.create({ url: "about:blank", active: false }, resolve)
       );
 
       let logHtml = "";
@@ -184,10 +184,7 @@ async function main() {
           const url = raceUrls[i];
           btn.textContent = `Importing… (${i + 1}/${raceUrls.length})`;
 
-          // Navigate (first URL already loaded from tab creation)
-          if (i > 0) {
-            await new Promise(resolve => chrome.tabs.update(bgTab.id, { url }, resolve));
-          }
+          await new Promise(resolve => chrome.tabs.update(bgTab.id, { url }, resolve));
           await waitForTabLoad(bgTab.id);
 
           try {
