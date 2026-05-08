@@ -59,6 +59,14 @@ export default function MeetingDetailPage() {
   const [pasteHtmlImporting, setPasteHtmlImporting] = useState(false);
   const [pasteHtmlLog, setPasteHtmlLog] = useState<{ race: number; count: number; error?: string }[]>([]);
 
+  const [extensionId, setExtensionId] = useState<string | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [syncLog, setSyncLog] = useState<{ text: string; ok: boolean }[]>([]);
+  const [mrcMeetingUrl, setMrcMeetingUrl] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(`mrc-meeting-url-${meetingId}`) ?? "") : ""
+  );
+
   async function load() {
     setLoading(true);
 
@@ -216,6 +224,71 @@ export default function MeetingDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
 
+  // Detect Chrome extension
+  useEffect(() => {
+    const check = () => {
+      const id = (window as unknown as { mrcExtensionId?: string }).mrcExtensionId;
+      if (id) setExtensionId(id);
+    };
+    check();
+    const t = setTimeout(check, 500);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Listen for progress events from extension
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail.event === "start") {
+        setSyncLog([{ text: `Found ${detail.total} races — importing…`, ok: true }]);
+      } else if (detail.event === "race-done") {
+        setSyncLog((prev) => [...prev, { text: `✓ Race ${detail.raceNumber} — ${detail.importedCount} entries`, ok: true }]);
+        if (detail.index === detail.total - 1) {
+          setSyncRunning(false);
+          load();
+        }
+      } else if (detail.event === "race-error") {
+        setSyncLog((prev) => [...prev, { text: `✗ Race ${detail.index + 1}: ${detail.message}`, ok: false }]);
+        if (detail.index === detail.total - 1) {
+          setSyncRunning(false);
+          load();
+        }
+      } else if (detail.event === "done") {
+        setSyncRunning(false);
+        load();
+      } else if (detail.event === "error") {
+        setSyncLog((prev) => [...prev, { text: `✗ ${detail.message}`, ok: false }]);
+        setSyncRunning(false);
+      }
+    };
+    window.addEventListener("mrc-import-progress", handler);
+    return () => window.removeEventListener("mrc-import-progress", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function startSync() {
+    if (!extensionId || !mrcMeetingUrl.trim()) return;
+    setSyncRunning(true);
+    setSyncLog([{ text: "Starting…", ok: true }]);
+    localStorage.setItem(`mrc-meeting-url-${meetingId}`, mrcMeetingUrl.trim());
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
+      setSyncLog([{ text: "✗ Not logged in.", ok: false }]);
+      setSyncRunning(false);
+      return;
+    }
+
+    (window as unknown as { chrome: { runtime: { sendMessage: (id: string, msg: unknown) => void } } })
+      .chrome.runtime.sendMessage(extensionId, {
+        type: "import-meeting",
+        meetingUrl: mrcMeetingUrl.trim(),
+        meetingId,
+        token,
+      });
+  }
+
   // Save to localStorage immediately + sync to Supabase after 400ms idle.
   // urlsReady gates this so the initial empty render doesn't wipe saved data.
   useEffect(() => {
@@ -280,6 +353,16 @@ export default function MeetingDetailPage() {
             >
               Paste page source
             </Button>
+
+            {extensionId && (
+              <Button
+                variant="outline"
+                onClick={() => { setSyncLog([]); setSyncOpen(true); }}
+                disabled={syncRunning}
+              >
+                {syncRunning ? "Syncing…" : "Sync from MRC"}
+              </Button>
+            )}
 
             <Button onClick={() => setCreateRacesOpen(true)}>Create races</Button>
 
@@ -409,6 +492,45 @@ export default function MeetingDetailPage() {
             <Button variant="outline" onClick={() => { setSingleMrcOpen(false); setSingleMrcInput(""); }}>Cancel</Button>
             <Button onClick={() => singleMrcInput.trim() && updateFromMrc(singleMrcInput.trim())} disabled={updatingMrc}>
               {updatingMrc ? "Importing..." : "Import"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sync from MRC dialog */}
+      <Dialog open={syncOpen} onOpenChange={(o) => { if (!o && !syncRunning) { setSyncOpen(false); setSyncLog([]); } }}>
+        <DialogContent showCloseButton={false} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Sync from MRC</DialogTitle>
+            <DialogDescription>
+              Paste the MRC meeting page URL. The extension will open it in the background and import all races automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Input
+            type="url"
+            placeholder="https://maltaracingclub.com/meeting.php?id=..."
+            value={mrcMeetingUrl}
+            onChange={(e) => setMrcMeetingUrl(e.target.value)}
+            disabled={syncRunning}
+          />
+
+          {syncLog.length > 0 && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 space-y-1 max-h-48 overflow-y-auto">
+              {syncLog.map((entry, i) => (
+                <p key={i} className={`text-sm ${entry.ok ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+                  {entry.text}
+                </p>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSyncOpen(false); setSyncLog([]); }} disabled={syncRunning}>
+              {syncLog.some(e => e.text.startsWith("✓")) ? "Done" : "Cancel"}
+            </Button>
+            <Button onClick={startSync} disabled={syncRunning || !mrcMeetingUrl.trim()}>
+              {syncRunning ? "Syncing…" : "Sync all races"}
             </Button>
           </DialogFooter>
         </DialogContent>

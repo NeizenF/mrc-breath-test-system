@@ -1,4 +1,14 @@
-// Runs on the MRC app domain — extracts the Supabase session token and caches it
+// Expose extension ID to the web page so it can send messages to this extension
+window.mrcExtensionId = chrome.runtime.id;
+
+// Relay progress messages from background -> web page via CustomEvent
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === "mrc-progress") {
+    window.dispatchEvent(new CustomEvent("mrc-import-progress", { detail: message }));
+  }
+});
+
+// Cache Supabase session token for extension use
 (function () {
   try {
     const key = Object.keys(localStorage).find(

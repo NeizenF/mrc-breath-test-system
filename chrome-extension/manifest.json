@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MRC Race Importer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "One-click import of MRC race entries into the Breath Test System",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": [
@@ -9,6 +9,12 @@
     "https://www.maltaracingclub.com/*",
     "https://mrc-breath-test-system.vercel.app/*"
   ],
+  "externally_connectable": {
+    "matches": ["https://mrc-breath-test-system.vercel.app/*"]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://mrc-breath-test-system.vercel.app/*"],

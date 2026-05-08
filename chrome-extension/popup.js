@@ -69,7 +69,7 @@ function waitForTabLoad(tabId) {
       if (changeInfo.status === "loading") navigating = true;
       if (navigating && changeInfo.status === "complete") {
         chrome.tabs.onUpdated.removeListener(listener);
-        setTimeout(resolve, 1000); // let page settle
+        setTimeout(resolve, 200); // let page settle
       }
     };
     chrome.tabs.onUpdated.addListener(listener);
