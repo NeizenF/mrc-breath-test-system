@@ -8,7 +8,7 @@ function waitForTabLoad(tabId) {
       if (changeInfo.status === "loading") navigating = true;
       if (navigating && changeInfo.status === "complete") {
         chrome.tabs.onUpdated.removeListener(listener);
-        setTimeout(resolve, 200);
+        resolve();
       }
     };
     chrome.tabs.onUpdated.addListener(listener);
