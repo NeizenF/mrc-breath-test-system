@@ -50,25 +50,25 @@ export default function SeasonDashboardPage() {
         .eq("is_archived", false)
         .order("meeting_date", { ascending: true });
 
-      // Load all audit log actions (only tested actions, not clears)
-      const { data: logs } = await supabase
-        .from("audit_logs")
-        .select("meeting_id,action")
-        .in("action", ["set_positive", "set_negative"]);
+      // Load tests that have been completed (tested = true) — this is the current state, not audit history
+      const { data: tests } = await supabase
+        .from("tests")
+        .select("meeting_id,result")
+        .eq("tested", true);
 
       if (!mounted) return;
 
       const meetingList = meetings ?? [];
-      const logList = logs ?? [];
+      const testList = tests ?? [];
 
       // Aggregate per meeting
       const statsMap = new Map<string, { totalTested: number; positives: number }>();
-      for (const log of logList) {
-        if (!log.meeting_id) continue;
-        const s = statsMap.get(log.meeting_id) ?? { totalTested: 0, positives: 0 };
+      for (const t of testList) {
+        if (!t.meeting_id) continue;
+        const s = statsMap.get(t.meeting_id) ?? { totalTested: 0, positives: 0 };
         s.totalTested += 1;
-        if (log.action === "set_positive") s.positives += 1;
-        statsMap.set(log.meeting_id, s);
+        if (t.result === "positive") s.positives += 1;
+        statsMap.set(t.meeting_id, s);
       }
 
       const stats: MeetingStat[] = meetingList.map((m) => {
@@ -80,8 +80,8 @@ export default function SeasonDashboardPage() {
         return { id: m.id, label, totalTested: s.totalTested, positives: s.positives };
       }).filter((s) => s.totalTested > 0);
 
-      const totalTested = logList.length;
-      const totalPositives = logList.filter((l) => l.action === "set_positive").length;
+      const totalTested = testList.length;
+      const totalPositives = testList.filter((t) => t.result === "positive").length;
 
       setSummary({ totalMeetings: meetingList.length, totalTested, totalPositives });
       setMeetingStats(stats);
