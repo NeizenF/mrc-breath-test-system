@@ -15,6 +15,7 @@ type Meeting = {
   id: string;
   title: string | null;
   meeting_date: string | null;
+  is_archived: boolean | null;
 };
 
 type Candidate = {
@@ -32,7 +33,8 @@ function formatDate(d: string | null) {
 }
 
 function meetingLabel(m: Meeting) {
-  return m.title?.trim() || formatDate(m.meeting_date);
+  const base = m.title?.trim() || formatDate(m.meeting_date);
+  return m.is_archived ? `${base} [Archived]` : base;
 }
 
 export default function DrugTestsPage() {
@@ -64,8 +66,7 @@ export default function DrugTestsPage() {
 
       const { data } = await supabase
         .from("meetings")
-        .select("id,title,meeting_date")
-        .eq("is_archived", false)
+        .select("id,title,meeting_date,is_archived")
         .order("meeting_date", { ascending: false });
 
       if (mounted) setMeetings(data ?? []);
