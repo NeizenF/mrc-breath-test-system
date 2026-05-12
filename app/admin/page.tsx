@@ -7,6 +7,7 @@ import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import {
   CalendarDays, ArchiveIcon, CalendarRange,
   ClipboardList, UserCog, Printer, Flag, Timer,
+  BarChart2, FlaskConical,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -53,6 +54,25 @@ const GROUPS = [
         title: "Users",
         description: "Manage user access and invite new members.",
         color: "bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400",
+      },
+    ],
+  },
+  {
+    label: "Analytics",
+    items: [
+      {
+        href: "/admin/season",
+        icon: BarChart2,
+        title: "Season Dashboard",
+        description: "Charts showing season-wide test statistics and trends.",
+        color: "bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400",
+      },
+      {
+        href: "/admin/drug-tests",
+        icon: FlaskConical,
+        title: "Drug Tests",
+        description: "Randomly select drivers for drug testing from a meeting.",
+        color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400",
       },
     ],
   },
