@@ -153,10 +153,8 @@ export default function DrugTestsPage() {
       picked.push(pool.splice(idx, 1)[0]);
     }
 
-    const pickedIds = new Set(picked.map((p) => p.entryId));
-    const all: SelectedDriver[] = candidates.map((c) => ({ ...c, picked: pickedIds.has(c.entryId) }));
-    all.sort((a, b) => (b.picked ? 1 : 0) - (a.picked ? 1 : 0) || a.raceNumber - b.raceNumber);
-    setResults(all);
+    picked.sort((a, b) => a.raceNumber - b.raceNumber);
+    setResults(picked.map((p) => ({ ...p, picked: true })));
   }
 
   if (checkingAccess) {
@@ -235,29 +233,16 @@ export default function DrugTestsPage() {
 
       {results && (
         <div>
-          <p className="mb-3 text-sm font-medium text-muted-foreground uppercase tracking-widest text-xs">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Selected: {pickedCount} driver{pickedCount !== 1 ? "s" : ""}
           </p>
           <div className="space-y-2">
-            {results.map((r) => (
+            {results.filter((r) => r.picked).map((r) => (
               <div
                 key={r.entryId}
-                className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
-                  r.picked
-                    ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40"
-                    : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800 opacity-40"
-                }`}
+                className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 px-4 py-3"
               >
-                <div className="flex items-center gap-4">
-                  {r.picked && (
-                    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400 dark:bg-amber-600 text-xs font-bold text-white">
-                      ✓
-                    </span>
-                  )}
-                  <span className={`font-medium text-sm ${r.picked ? "text-slate-900 dark:text-slate-100" : "text-slate-500 dark:text-slate-400"}`}>
-                    {r.driverName}
-                  </span>
-                </div>
+                <span className="font-medium text-sm text-slate-900 dark:text-slate-100">{r.driverName}</span>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
                   <span>Race {r.raceNumber}</span>
                   {r.gate != null && <span>Gate {r.gate}</span>}
