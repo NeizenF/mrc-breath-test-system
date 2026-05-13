@@ -88,7 +88,6 @@ export default function SeasonDashboardPage() {
         supabase
           .from("meetings")
           .select("id,title,meeting_date")
-          .eq("is_archived", false)
           .order("meeting_date", { ascending: true }),
 
         supabase
@@ -287,7 +286,7 @@ export default function SeasonDashboardPage() {
       ) : !data || data.meetingStats.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No test data yet. Run some race days first.
+            No test data found across any meetings.
           </CardContent>
         </Card>
       ) : (

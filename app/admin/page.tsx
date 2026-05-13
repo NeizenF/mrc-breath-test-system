@@ -7,7 +7,7 @@ import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import {
   CalendarDays, ArchiveIcon, CalendarRange,
   ClipboardList, UserCog, Printer, Flag, Timer,
-  BarChart2, FlaskConical, ShieldAlert,
+  BarChart2, FlaskConical, ShieldAlert, Trophy,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -80,6 +80,18 @@ const GROUPS = [
         title: "Driver Risk",
         description: "Analyse testing compliance and flag late drivers per meeting.",
         color: "bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400",
+      },
+    ],
+  },
+  {
+    label: "History",
+    items: [
+      {
+        href: "/admin/history",
+        icon: Trophy,
+        title: "Tazza l-Kbira",
+        description: "All-time winners and time progression of Malta's premier race.",
+        color: "bg-yellow-50 dark:bg-yellow-950 text-yellow-600 dark:text-yellow-400",
       },
     ],
   },
