@@ -10,25 +10,67 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, Legend,
+  AreaChart, Area,
 } from "recharts";
 
-type MeetingStat = { id: string; label: string; totalTested: number; positives: number };
-type Summary = { totalMeetings: number; totalTested: number; totalPositives: number };
-type RaceStat = { race: string; Tested: number; Positives: number };
-type DriverStat = { driver: string; Tests: number };
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type MeetingStat  = { id: string; label: string; date: string; totalTested: number; positives: number };
+type RaceStat     = { race: string; Tested: number; Positives: number };
+type DriverStat   = { driver: string; Tests: number; Positives: number };
+type MonthStat    = { month: string; Tested: number; Positives: number };
+type CumStat      = { name: string; Total: number };
+
+type AllData = {
+  totalMeetings: number;
+  totalTested: number;
+  totalPositives: number;
+  uniqueDrivers: number;
+  meetingStats: MeetingStat[];
+  raceStats: RaceStat[];
+  driverStats: DriverStat[];
+  monthStats: MonthStat[];
+  cumulativeStats: CumStat[];
+};
+
+const TABS = ["Overview", "Races", "Drivers", "Trends"] as const;
+type Tab = typeof TABS[number];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function pluck<T>(val: T | T[] | null | undefined): T | null {
   if (!val) return null;
   return Array.isArray(val) ? (val[0] ?? null) : val;
 }
 
+function ChartCard({ title, height = 260, children }: { title: string; height?: number; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardContent className="pt-5 pb-4 px-4">
+        <p className="mb-4 text-sm font-medium">{title}</p>
+        <ResponsiveContainer width="100%" height={height}>
+          {children as React.ReactElement}
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Empty({ message = "Not enough data yet." }: { message?: string }) {
+  return (
+    <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function SeasonDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<Summary>({ totalMeetings: 0, totalTested: 0, totalPositives: 0 });
-  const [meetingStats, setMeetingStats] = useState<MeetingStat[]>([]);
-  const [raceStats, setRaceStats] = useState<RaceStat[]>([]);
-  const [driverStats, setDriverStats] = useState<DriverStat[]>([]);
+  const [data, setData] = useState<AllData | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("Overview");
 
   useEffect(() => {
     let mounted = true;
@@ -42,13 +84,7 @@ export default function SeasonDashboardPage() {
       if (!mounted) return;
       if (!admin) { router.replace("/dashboard"); return; }
 
-      // Fetch all data in parallel
-      const [
-        { data: meetings },
-        { data: tests },
-        { data: raceTests },
-        { data: driverTests },
-      ] = await Promise.all([
+      const [{ data: meetings }, { data: rawTests }] = await Promise.all([
         supabase
           .from("meetings")
           .select("id,title,meeting_date")
@@ -57,28 +93,18 @@ export default function SeasonDashboardPage() {
 
         supabase
           .from("tests")
-          .select("meeting_id,result")
-          .eq("tested", true),
-
-        supabase
-          .from("tests")
-          .select("result,entries(races(race_number))")
-          .eq("tested", true),
-
-        supabase
-          .from("tests")
-          .select("entries(driver_name_raw,drivers(full_name))")
+          .select("meeting_id,result,entries(driver_name_raw,drivers(full_name),races(race_number))")
           .eq("tested", true),
       ]);
 
       if (!mounted) return;
 
-      // ── Per-meeting stats ──────────────────────────────────────────────────
       const meetingList = meetings ?? [];
-      const testList = tests ?? [];
+      const tests = rawTests ?? [];
 
+      // ── Per-meeting ──────────────────────────────────────────────────────
       const statsMap = new Map<string, { totalTested: number; positives: number }>();
-      for (const t of testList) {
+      for (const t of tests) {
         if (!t.meeting_id) continue;
         const s = statsMap.get(t.meeting_id) ?? { totalTested: 0, positives: 0 };
         s.totalTested += 1;
@@ -86,19 +112,19 @@ export default function SeasonDashboardPage() {
         statsMap.set(t.meeting_id, s);
       }
 
-      const mStats: MeetingStat[] = meetingList.map((m) => {
+      const meetingStats: MeetingStat[] = meetingList.map((m) => {
         const s = statsMap.get(m.id) ?? { totalTested: 0, positives: 0 };
         const d = m.meeting_date
           ? new Date(m.meeting_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
           : "—";
-        return { id: m.id, label: m.title?.trim() || d, ...s };
+        return { id: m.id, label: m.title?.trim() || d, date: m.meeting_date ?? "", ...s };
       }).filter((s) => s.totalTested > 0);
 
-      // ── By race number ─────────────────────────────────────────────────────
+      // ── By race number ───────────────────────────────────────────────────
       const raceMap = new Map<number, { tested: number; positives: number }>();
-      for (const t of (raceTests ?? [])) {
+      for (const t of tests) {
         const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
-        const race = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
+        const race  = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
         const rn: number | null = (race as { race_number?: number } | null)?.race_number ?? null;
         if (!rn) continue;
         const s = raceMap.get(rn) ?? { tested: 0, positives: 0 };
@@ -106,36 +132,67 @@ export default function SeasonDashboardPage() {
         if ((t as { result?: string }).result === "positive") s.positives += 1;
         raceMap.set(rn, s);
       }
-      const rStats: RaceStat[] = Array.from(raceMap.entries())
+      const raceStats: RaceStat[] = Array.from(raceMap.entries())
         .sort((a, b) => a[0] - b[0])
         .map(([rn, s]) => ({ race: `R${rn}`, Tested: s.tested, Positives: s.positives }));
 
-      // ── By driver ─────────────────────────────────────────────────────────
-      const driverMap = new Map<string, number>();
-      for (const t of (driverTests ?? [])) {
+      // ── By driver ────────────────────────────────────────────────────────
+      const driverMap = new Map<string, { tests: number; positives: number }>();
+      for (const t of tests) {
         const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
         if (!entry) continue;
-        const e = entry as { driver_name_raw?: string | null; drivers?: unknown };
+        const e  = entry as { driver_name_raw?: string | null; drivers?: unknown };
         const dr = pluck(e.drivers as Parameters<typeof pluck>[0]);
         const name = (dr as { full_name?: string } | null)?.full_name?.trim()
           || e.driver_name_raw?.trim()
           || null;
         if (!name) continue;
-        driverMap.set(name, (driverMap.get(name) ?? 0) + 1);
+        const s = driverMap.get(name) ?? { tests: 0, positives: 0 };
+        s.tests += 1;
+        if ((t as { result?: string }).result === "positive") s.positives += 1;
+        driverMap.set(name, s);
       }
-      const dStats: DriverStat[] = Array.from(driverMap.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 12)
-        .map(([driver, Tests]) => ({ driver, Tests }));
+      const driverStats: DriverStat[] = Array.from(driverMap.entries())
+        .sort((a, b) => b[1].tests - a[1].tests)
+        .slice(0, 15)
+        .map(([driver, s]) => ({ driver, Tests: s.tests, Positives: s.positives }));
 
-      setSummary({
-        totalMeetings: meetingList.length,
-        totalTested: testList.length,
-        totalPositives: testList.filter((t) => t.result === "positive").length,
+      const uniqueDrivers = driverMap.size;
+
+      // ── Monthly ──────────────────────────────────────────────────────────
+      const monthMap = new Map<string, { tested: number; positives: number; ts: number }>();
+      for (const m of meetingList) {
+        const s = statsMap.get(m.id);
+        if (!s || s.totalTested === 0 || !m.meeting_date) continue;
+        const d   = new Date(m.meeting_date);
+        const key = d.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+        const ex  = monthMap.get(key) ?? { tested: 0, positives: 0, ts: d.getTime() };
+        ex.tested    += s.totalTested;
+        ex.positives += s.positives;
+        monthMap.set(key, ex);
+      }
+      const monthStats: MonthStat[] = Array.from(monthMap.entries())
+        .sort((a, b) => a[1].ts - b[1].ts)
+        .map(([month, s]) => ({ month, Tested: s.tested, Positives: s.positives }));
+
+      // ── Cumulative ───────────────────────────────────────────────────────
+      let cum = 0;
+      const cumulativeStats: CumStat[] = meetingStats.map((m) => {
+        cum += m.totalTested;
+        return { name: m.label, Total: cum };
       });
-      setMeetingStats(mStats);
-      setRaceStats(rStats);
-      setDriverStats(dStats);
+
+      setData({
+        totalMeetings: meetingList.length,
+        totalTested: tests.length,
+        totalPositives: tests.filter((t) => t.result === "positive").length,
+        uniqueDrivers,
+        meetingStats,
+        raceStats,
+        driverStats,
+        monthStats,
+        cumulativeStats,
+      });
       setLoading(false);
     }
 
@@ -143,160 +200,281 @@ export default function SeasonDashboardPage() {
     return () => { mounted = false; };
   }, [router]);
 
-  const positiveRate = summary.totalTested > 0
-    ? ((summary.totalPositives / summary.totalTested) * 100).toFixed(1)
-    : "0.0";
+  // ── Derived chart series ───────────────────────────────────────────────────
 
-  const meetingChartData = meetingStats.map((s) => ({
+  const meetingChartData = data?.meetingStats.map((s) => ({
     name: s.label,
     Tested: s.totalTested,
     Positives: s.positives,
-  }));
+  })) ?? [];
 
-  const rateData = meetingStats.map((s) => ({
+  const rateData = data?.meetingStats.map((s) => ({
     name: s.label,
     "Positive %": s.totalTested > 0 ? parseFloat(((s.positives / s.totalTested) * 100).toFixed(1)) : 0,
-  }));
+  })) ?? [];
 
-  const summaryCards = [
-    { label: "Active Meetings", value: summary.totalMeetings.toString(), color: "text-emerald-600 dark:text-emerald-400" },
-    { label: "Tests Conducted", value: summary.totalTested.toString(), color: "text-sky-600 dark:text-sky-400" },
-    { label: "Positives", value: summary.totalPositives.toString(), color: "text-red-600 dark:text-red-400" },
-    { label: "Positive Rate", value: `${positiveRate}%`, color: "text-amber-600 dark:text-amber-400" },
-  ];
+  const positiveRate = data && data.totalTested > 0
+    ? ((data.totalPositives / data.totalTested) * 100).toFixed(1)
+    : "0.0";
 
-  const hasData = meetingStats.length > 0;
+  const summaryCards = data ? [
+    { label: "Active Meetings",   value: data.totalMeetings.toString(),   color: "text-emerald-600 dark:text-emerald-400" },
+    { label: "Tests Conducted",   value: data.totalTested.toString(),      color: "text-sky-600 dark:text-sky-400" },
+    { label: "Unique Drivers",    value: data.uniqueDrivers.toString(),    color: "text-violet-600 dark:text-violet-400" },
+    { label: "Positives",         value: data.totalPositives.toString(),   color: "text-red-600 dark:text-red-400" },
+    { label: "Positive Rate",     value: `${positiveRate}%`,              color: "text-amber-600 dark:text-amber-400" },
+  ] : [];
+
+  const sharedXAxis = (
+    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+  );
+  const sharedYAxis = <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-4 md:p-6">
       <div className="mb-2">
         <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Season Dashboard" }]} />
       </div>
-      <div className="mb-6 mt-4">
+      <div className="mb-5 mt-4">
         <h1 className="text-xl font-semibold tracking-tight">Season Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Season-wide breath test statistics.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Season-wide breath test analytics.</p>
       </div>
 
       {/* Summary cards */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {summaryCards.map(({ label, value, color }) => (
-          <Card key={label}>
-            <CardContent className="py-5 px-5">
-              {loading ? (
-                <Skeleton className="h-8 w-16 mb-1" />
-              ) : (
-                <p className={`text-3xl font-bold tabular-nums ${color}`}>{value}</p>
-              )}
-              <p className="mt-1 text-xs text-muted-foreground">{label}</p>
-            </CardContent>
-          </Card>
+      <div className="mb-6 flex flex-wrap gap-3">
+        {loading
+          ? [1, 2, 3, 4, 5].map((i) => (
+              <Card key={i} className="flex-1 min-w-[140px]">
+                <CardContent className="py-4 px-4">
+                  <Skeleton className="h-8 w-16 mb-1" />
+                  <Skeleton className="h-3 w-24 mt-2" />
+                </CardContent>
+              </Card>
+            ))
+          : summaryCards.map(({ label, value, color }) => (
+              <Card key={label} className="flex-1 min-w-[140px]">
+                <CardContent className="py-4 px-4">
+                  <p className={`text-3xl font-bold tabular-nums ${color}`}>{value}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+                </CardContent>
+              </Card>
+            ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="mb-6 flex gap-0 border-b border-slate-200 dark:border-slate-700">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeTab === tab
+                ? "border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100"
+                : "border-transparent text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300"
+            }`}
+          >
+            {tab}
+          </button>
         ))}
       </div>
 
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-64 w-full rounded-xl" />)}
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-72 w-full rounded-xl" />)}
         </div>
-      ) : !hasData ? (
+      ) : !data || data.meetingStats.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             No test data yet. Run some race days first.
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <>
+          {/* ── Overview ─────────────────────────────────────────────── */}
+          {activeTab === "Overview" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ChartCard title="Tests per Meeting" height={280}>
+                <BarChart data={meetingChartData} margin={{ top: 0, right: 8, left: -20, bottom: 50 }}>
+                  {sharedXAxis}{sharedYAxis}
+                  <Tooltip />
+                  <Legend verticalAlign="top" height={26} wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="Tested" fill="#38bdf8" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="Positives" fill="#f87171" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ChartCard>
 
-          {/* Row 1: Tests per meeting + Positive rate trend */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Card>
-              <CardContent className="pt-5 pb-4 px-4">
-                <p className="mb-4 text-sm font-medium">Tests per Meeting</p>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={meetingChartData} margin={{ top: 0, right: 8, left: -20, bottom: 44 }}>
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip />
-                    <Legend verticalAlign="top" height={26} wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="Tested" fill="#38bdf8" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Positives" fill="#f87171" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="pt-5 pb-4 px-4">
-                <p className="mb-4 text-sm font-medium">Positive Rate Trend (%)</p>
-                {rateData.length < 2 ? (
-                  <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-                    Need at least 2 meetings with data.
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <LineChart data={rateData} margin={{ top: 0, right: 8, left: -20, bottom: 44 }}>
+              <ChartCard title="Positive Rate per Meeting (%)" height={280}>
+                {rateData.length < 2
+                  ? <Empty message="Need at least 2 meetings with data." />
+                  : <LineChart data={rateData} margin={{ top: 0, right: 8, left: -20, bottom: 50 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                      {sharedXAxis}
                       <YAxis tick={{ fontSize: 11 }} unit="%" domain={[0, "auto"]} />
                       <Tooltip formatter={(v) => [`${v}%`, "Positive Rate"]} />
                       <Line type="monotone" dataKey="Positive %" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: "#f59e0b" }} />
                     </LineChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                }
+              </ChartCard>
+            </div>
+          )}
 
-          {/* Row 2: Tests by race number + Top drivers */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Card>
-              <CardContent className="pt-5 pb-4 px-4">
-                <p className="mb-4 text-sm font-medium">Tests by Race Number</p>
-                {raceStats.length === 0 ? (
-                  <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">No data.</div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={raceStats} margin={{ top: 0, right: 8, left: -20, bottom: 8 }}>
+          {/* ── Races ────────────────────────────────────────────────── */}
+          {activeTab === "Races" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ChartCard title="Tests by Race Number" height={280}>
+                {data.raceStats.length === 0
+                  ? <Empty />
+                  : <BarChart data={data.raceStats} margin={{ top: 0, right: 8, left: -20, bottom: 8 }}>
                       <XAxis dataKey="race" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      {sharedYAxis}
                       <Tooltip />
                       <Legend verticalAlign="top" height={26} wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="Tested" fill="#818cf8" radius={[3, 3, 0, 0]} />
                       <Bar dataKey="Positives" fill="#f87171" radius={[3, 3, 0, 0]} />
                     </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
+                }
+              </ChartCard>
 
-            <Card>
-              <CardContent className="pt-5 pb-4 px-4">
-                <p className="mb-4 text-sm font-medium">Most Tested Drivers (Top 12)</p>
-                {driverStats.length === 0 ? (
-                  <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">No data.</div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart
-                      data={driverStats}
+              <ChartCard title="Positive Rate by Race Number (%)" height={280}>
+                {data.raceStats.length < 2
+                  ? <Empty />
+                  : <LineChart
+                      data={data.raceStats.map((r) => ({
+                        race: r.race,
+                        "Positive %": r.Tested > 0 ? parseFloat(((r.Positives / r.Tested) * 100).toFixed(1)) : 0,
+                      }))}
+                      margin={{ top: 0, right: 8, left: -20, bottom: 8 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="race" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} unit="%" domain={[0, "auto"]} />
+                      <Tooltip formatter={(v) => [`${v}%`, "Positive Rate"]} />
+                      <Line type="monotone" dataKey="Positive %" stroke="#a78bfa" strokeWidth={2} dot={{ r: 4, fill: "#a78bfa" }} />
+                    </LineChart>
+                }
+              </ChartCard>
+            </div>
+          )}
+
+          {/* ── Drivers ──────────────────────────────────────────────── */}
+          {activeTab === "Drivers" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ChartCard title="Most Tested Drivers (Top 15)" height={340}>
+                {data.driverStats.length === 0
+                  ? <Empty />
+                  : <BarChart
+                      data={data.driverStats}
                       layout="vertical"
-                      margin={{ top: 0, right: 16, left: 8, bottom: 0 }}
+                      margin={{ top: 0, right: 24, left: 8, bottom: 0 }}
                     >
                       <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <YAxis
-                        type="category"
-                        dataKey="driver"
-                        tick={{ fontSize: 10 }}
-                        width={90}
-                      />
+                      <YAxis type="category" dataKey="driver" tick={{ fontSize: 10 }} width={110} />
                       <Tooltip />
+                      <Legend verticalAlign="top" height={26} wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="Tests" fill="#34d399" radius={[0, 3, 3, 0]} />
+                      <Bar dataKey="Positives" fill="#f87171" radius={[0, 3, 3, 0]} />
                     </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                }
+              </ChartCard>
 
-        </div>
+              <ChartCard title="Tests vs Positives per Driver (Top 15)" height={340}>
+                {data.driverStats.length === 0
+                  ? <Empty />
+                  : <LineChart
+                      data={data.driverStats}
+                      margin={{ top: 0, right: 24, left: -10, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="driver" tick={{ fontSize: 9 }} angle={-40} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip />
+                      <Legend verticalAlign="top" height={26} wrapperStyle={{ fontSize: 11 }} />
+                      <Line type="monotone" dataKey="Tests" stroke="#34d399" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Positives" stroke="#f87171" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                }
+              </ChartCard>
+            </div>
+          )}
+
+          {/* ── Trends ───────────────────────────────────────────────── */}
+          {activeTab === "Trends" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ChartCard title="Monthly Tests & Positives" height={280}>
+                {data.monthStats.length < 2
+                  ? <Empty />
+                  : <LineChart data={data.monthStats} margin={{ top: 0, right: 8, left: -20, bottom: 44 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="month" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip />
+                      <Legend verticalAlign="top" height={26} wrapperStyle={{ fontSize: 11 }} />
+                      <Line type="monotone" dataKey="Tested" stroke="#38bdf8" strokeWidth={2} dot={{ r: 4, fill: "#38bdf8" }} />
+                      <Line type="monotone" dataKey="Positives" stroke="#f87171" strokeWidth={2} dot={{ r: 4, fill: "#f87171" }} />
+                    </LineChart>
+                }
+              </ChartCard>
+
+              <ChartCard title="Cumulative Tests Over Season" height={280}>
+                {data.cumulativeStats.length < 2
+                  ? <Empty />
+                  : <AreaChart data={data.cumulativeStats} margin={{ top: 0, right: 8, left: -20, bottom: 50 }}>
+                      <defs>
+                        <linearGradient id="cumGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      {sharedXAxis}
+                      <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="Total" stroke="#38bdf8" strokeWidth={2} fill="url(#cumGrad)" dot={{ r: 3, fill: "#38bdf8" }} />
+                    </AreaChart>
+                }
+              </ChartCard>
+
+              <ChartCard title="Monthly Positive Rate Trend (%)" height={260}>
+                {data.monthStats.length < 2
+                  ? <Empty />
+                  : <AreaChart
+                      data={data.monthStats.map((m) => ({
+                        month: m.month,
+                        "Positive %": m.Tested > 0 ? parseFloat(((m.Positives / m.Tested) * 100).toFixed(1)) : 0,
+                      }))}
+                      margin={{ top: 0, right: 8, left: -20, bottom: 44 }}
+                    >
+                      <defs>
+                        <linearGradient id="rateGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="month" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                      <YAxis tick={{ fontSize: 11 }} unit="%" domain={[0, "auto"]} />
+                      <Tooltip formatter={(v) => [`${v}%`, "Positive Rate"]} />
+                      <Area type="monotone" dataKey="Positive %" stroke="#f59e0b" strokeWidth={2} fill="url(#rateGrad)" dot={{ r: 3, fill: "#f59e0b" }} />
+                    </AreaChart>
+                }
+              </ChartCard>
+
+              <ChartCard title="Tests per Meeting (Line)" height={260}>
+                <LineChart data={meetingChartData} margin={{ top: 0, right: 8, left: -20, bottom: 50 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  {sharedXAxis}
+                  {sharedYAxis}
+                  <Tooltip />
+                  <Legend verticalAlign="top" height={26} wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="Tested" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="Positives" stroke="#f87171" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ChartCard>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
