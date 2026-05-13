@@ -7,7 +7,7 @@ import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import {
   CalendarDays, ArchiveIcon, CalendarRange,
   ClipboardList, UserCog, Printer, Flag, Timer,
-  BarChart2, FlaskConical,
+  BarChart2, FlaskConical, ShieldAlert,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -73,6 +73,13 @@ const GROUPS = [
         title: "Drug Tests",
         description: "Randomly select drivers for drug testing from a meeting.",
         color: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400",
+      },
+      {
+        href: "/admin/driver-risk",
+        icon: ShieldAlert,
+        title: "Driver Risk",
+        description: "Analyse testing compliance and flag late drivers per meeting.",
+        color: "bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400",
       },
     ],
   },
