@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
@@ -10,7 +10,7 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Trash2, Search } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Dot,
@@ -106,10 +106,7 @@ function parseTimeStr(t: string): number | null {
   if (!t.trim()) return null;
   const m = t.match(/(\d+)[':'](\d{2})[."']?(\d)?/);
   if (!m) return null;
-  const mins   = parseInt(m[1]);
-  const secs   = parseInt(m[2]);
-  const tenths = m[3] ? parseInt(m[3]) : 0;
-  return mins * 60 + secs + tenths / 10;
+  return parseInt(m[1]) * 60 + parseInt(m[2]) + (m[3] ? parseInt(m[3]) / 10 : 0);
 }
 
 function secsToLabel(s: number) {
@@ -143,22 +140,52 @@ function CustomTooltip({ active, payload }: {
   );
 }
 
+const TABS = ["All Editions", "Horses", "Drivers"] as const;
+type Tab = typeof TABS[number];
+
+// ── Leaderboard row ───────────────────────────────────────────────────────────
+
+function LeaderboardRow({ rank, name, wins, years }: { rank: number; name: string; wins: number; years: number[] }) {
+  const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">
+        {medal ?? rank}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <p className="font-semibold text-sm text-slate-900 dark:text-slate-100 truncate">{name}</p>
+          <span className="shrink-0 text-xs font-medium text-violet-600 dark:text-violet-400">{wins} win{wins !== 1 ? "s" : ""}</span>
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {years.map((y) => (
+            <span key={y} className="rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+              {y}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function HistoryPage() {
   const router = useRouter();
-  const [checking, setChecking]   = useState(true);
-  const [dbEntries, setDbEntries] = useState<Winner[]>([]);
-  const [saving, setSaving]       = useState(false);
+  const [checking, setChecking]     = useState(true);
+  const [dbEntries, setDbEntries]   = useState<Winner[]>([]);
+  const [saving, setSaving]         = useState(false);
+  const [activeTab, setActiveTab]   = useState<Tab>("All Editions");
+  const [horseSearch, setHorseSearch]   = useState("");
+  const [driverSearch, setDriverSearch] = useState("");
 
-  // Form state
-  const [fYear,   setFYear]   = useState("");
-  const [fHorse,  setFHorse]  = useState("");
+  const [fYear, setFYear]     = useState("");
+  const [fHorse, setFHorse]   = useState("");
   const [fDriver, setFDriver] = useState("");
-  const [fTime,   setFTime]   = useState("");
-  const [fNote,   setFNote]   = useState("");
+  const [fTime, setFTime]     = useState("");
+  const [fNote, setFNote]     = useState("");
 
-  // Auth
   useEffect(() => {
     let mounted = true;
     async function init() {
@@ -181,65 +208,31 @@ export default function HistoryPage() {
       .from("tazza_history")
       .select("id,year,horse,driver,time_str,note")
       .order("year", { ascending: true });
-
-    if (error) {
-      console.error(error);
-      return;
-    }
-
+    if (error) { console.error(error); return; }
     setDbEntries(
       (data ?? []).map((r) => ({
-        year:     r.year,
-        horse:    r.horse,
-        driver:   r.driver,
-        time:     r.time_str,
-        timeSecs: r.time_str ? parseTimeStr(r.time_str) : null,
-        note:     r.note,
-        fromDb:   true,
-        dbId:     r.id,
+        year: r.year, horse: r.horse, driver: r.driver,
+        time: r.time_str, timeSecs: r.time_str ? parseTimeStr(r.time_str) : null,
+        note: r.note, fromDb: true, dbId: r.id,
       }))
     );
   }
 
   async function addEntry() {
     const year = parseInt(fYear);
-    if (!fYear || isNaN(year) || year < 1900 || year > 2100) {
-      toast.error("Enter a valid year.");
-      return;
-    }
-    if (!fHorse.trim()) {
-      toast.error("Horse name is required.");
-      return;
-    }
-    if (HARDCODED_YEARS.has(year)) {
-      toast.error(`${year} already exists in the historical records.`);
-      return;
-    }
-    if (dbEntries.some((e) => e.year === year)) {
-      toast.error(`${year} has already been added.`);
-      return;
-    }
-    if (fTime.trim() && parseTimeStr(fTime.trim()) === null) {
-      toast.error("Invalid time format. Use e.g. 1'14\"5");
-      return;
-    }
+    if (!fYear || isNaN(year) || year < 1900 || year > 2100) { toast.error("Enter a valid year."); return; }
+    if (!fHorse.trim()) { toast.error("Horse name is required."); return; }
+    if (HARDCODED_YEARS.has(year)) { toast.error(`${year} already exists in the historical records.`); return; }
+    if (dbEntries.some((e) => e.year === year)) { toast.error(`${year} has already been added.`); return; }
+    if (fTime.trim() && parseTimeStr(fTime.trim()) === null) { toast.error("Invalid time format. Use e.g. 1'14\"5"); return; }
 
     setSaving(true);
     const { error } = await supabase.from("tazza_history").insert({
-      year,
-      horse:    fHorse.trim(),
-      driver:   fDriver.trim() || null,
-      time_str: fTime.trim() || null,
-      note:     fNote.trim() || null,
+      year, horse: fHorse.trim(), driver: fDriver.trim() || null,
+      time_str: fTime.trim() || null, note: fNote.trim() || null,
     });
     setSaving(false);
-
-    if (error) {
-      toast.error("Failed to save entry.");
-      console.error(error);
-      return;
-    }
-
+    if (error) { toast.error("Failed to save entry."); return; }
     toast.success(`${year} added.`);
     setFYear(""); setFHorse(""); setFDriver(""); setFTime(""); setFNote("");
     loadDb();
@@ -252,35 +245,66 @@ export default function HistoryPage() {
     setDbEntries((prev) => prev.filter((e) => e.dbId !== id));
   }
 
-  // ── Merge hardcoded + DB (DB doesn't override hardcoded, only adds new years)
-  const allWinners: Winner[] = [...HARDCODED, ...dbEntries].sort((a, b) => a.year - b.year);
+  // ── Derived data ────────────────────────────────────────────────────────────
 
-  // Chart: only entries with a time
-  const chartData = allWinners
-    .filter((w) => w.timeSecs !== null)
-    .map((w) => ({
-      year:   w.year,
-      time:   w.timeSecs,
-      label:  w.time,
-      horse:  w.horse,
-      driver: w.driver,
-      record: !!w.note,
-    }));
+  const allWinners: Winner[] = useMemo(
+    () => [...HARDCODED, ...dbEntries].sort((a, b) => a.year - b.year),
+    [dbEntries]
+  );
 
-  const recordYears   = chartData.filter((d) => d.record).map((d) => d.year);
-  const currentRecord = [...allWinners].reverse().find((w) => w.timeSecs !== null);
-  const totalEditions = allWinners.filter((w) => w.horse && w.horse !== "Race Suspended").length;
-  const mostWins = (() => {
-    const counts = new Map<string, number>();
+  const chartData = useMemo(() =>
+    allWinners.filter((w) => w.timeSecs !== null).map((w) => ({
+      year: w.year, time: w.timeSecs, label: w.time,
+      horse: w.horse, driver: w.driver, record: !!w.note,
+    })),
+    [allWinners]
+  );
+
+  const horseLeaderboard = useMemo(() => {
+    const map = new Map<string, number[]>();
     for (const w of allWinners) {
-      if (w.driver) counts.set(w.driver, (counts.get(w.driver) ?? 0) + 1);
+      if (!w.horse || w.horse === "Race Suspended") continue;
+      if (!map.has(w.horse)) map.set(w.horse, []);
+      map.get(w.horse)!.push(w.year);
     }
-    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-    return sorted[0] ? `${sorted[0][0]} (${sorted[0][1]})` : "—";
-  })();
+    return Array.from(map.entries())
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+      .map(([name, years]) => ({ name, wins: years.length, years }));
+  }, [allWinners]);
 
-  const yMin = Math.floor((Math.min(...chartData.map((d) => d.time ?? 999)) - 1));
-  const yMax = Math.ceil((Math.max(...chartData.map((d) => d.time ?? 0)) + 1));
+  const driverLeaderboard = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const w of allWinners) {
+      if (!w.driver) continue;
+      if (!map.has(w.driver)) map.set(w.driver, []);
+      map.get(w.driver)!.push(w.year);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+      .map(([name, years]) => ({ name, wins: years.length, years }));
+  }, [allWinners]);
+
+  const filteredHorses  = useMemo(() =>
+    horseSearch.trim()
+      ? horseLeaderboard.filter((h) => h.name.toLowerCase().includes(horseSearch.toLowerCase()))
+      : horseLeaderboard,
+    [horseLeaderboard, horseSearch]
+  );
+
+  const filteredDrivers = useMemo(() =>
+    driverSearch.trim()
+      ? driverLeaderboard.filter((d) => d.name.toLowerCase().includes(driverSearch.toLowerCase()))
+      : driverLeaderboard,
+    [driverLeaderboard, driverSearch]
+  );
+
+  const topHorse  = horseLeaderboard[0];
+  const topDriver = driverLeaderboard[0];
+  const currentRecord  = [...allWinners].reverse().find((w) => w.timeSecs !== null);
+  const totalEditions  = allWinners.filter((w) => w.horse && w.horse !== "Race Suspended").length;
+  const recordYears    = chartData.filter((d) => d.record).map((d) => d.year);
+  const yMin = chartData.length ? Math.floor(Math.min(...chartData.map((d) => d.time ?? 999)) - 1) : 70;
+  const yMax = chartData.length ? Math.ceil(Math.max(...chartData.map((d) => d.time ?? 0)) + 1) : 80;
 
   if (checking) {
     return (
@@ -305,153 +329,182 @@ export default function HistoryPage() {
       {/* Summary cards */}
       <div className="mb-6 flex flex-wrap gap-3">
         {[
-          { label: "Total Editions", value: totalEditions.toString(),       color: "text-emerald-600 dark:text-emerald-400" },
-          { label: "First Edition",  value: "1933",                         color: "text-slate-700 dark:text-slate-200" },
-          { label: "Current Record", value: currentRecord?.time ?? "—",     color: "text-sky-600 dark:text-sky-400" },
-          { label: "Record Horse",   value: currentRecord?.horse ?? "—",    color: "text-amber-600 dark:text-amber-400" },
-          { label: "Most Wins",      value: mostWins,                       color: "text-violet-600 dark:text-violet-400" },
+          { label: "Total Editions",    value: totalEditions.toString(),                              color: "text-emerald-600 dark:text-emerald-400" },
+          { label: "First Edition",     value: "1933",                                                color: "text-slate-700 dark:text-slate-200" },
+          { label: "Current Record",    value: currentRecord?.time ?? "—",                            color: "text-sky-600 dark:text-sky-400" },
+          { label: "Record Horse",      value: currentRecord?.horse ?? "—",                           color: "text-amber-600 dark:text-amber-400" },
+          { label: "Top Horse (wins)",  value: topHorse  ? `${topHorse.name} (${topHorse.wins})`   : "—", color: "text-violet-600 dark:text-violet-400" },
+          { label: "Top Driver (wins)", value: topDriver ? `${topDriver.name} (${topDriver.wins})` : "—", color: "text-rose-600 dark:text-rose-400" },
         ].map(({ label, value, color }) => (
-          <Card key={label} className="flex-1 min-w-[150px]">
+          <Card key={label} className="flex-1 min-w-[160px]">
             <CardContent className="py-4 px-4">
-              <p className={`text-xl font-bold leading-tight ${color}`}>{value}</p>
+              <p className={`text-base font-bold leading-tight ${color}`}>{value}</p>
               <p className="mt-1 text-xs text-muted-foreground">{label}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Time progression chart */}
-      {chartData.length > 0 && (
-        <Card className="mb-6">
-          <CardContent className="pt-5 pb-4 px-4">
-            <div className="mb-1 flex items-start justify-between">
-              <p className="text-sm font-medium">Winning Time Progression</p>
-              <p className="text-xs text-muted-foreground">Lower = faster &nbsp;·&nbsp; <span className="text-amber-500">●</span> Record</p>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData} margin={{ top: 10, right: 16, left: 8, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="year" tick={{ fontSize: 11 }} />
-                <YAxis domain={[yMin, yMax]} tickFormatter={secsToLabel} tick={{ fontSize: 10 }} width={54} reversed />
-                <Tooltip content={<CustomTooltip />} />
-                {recordYears.map((yr) => (
-                  <ReferenceLine key={yr} x={yr} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.5} />
-                ))}
-                <Line type="monotone" dataKey="time" stroke="#38bdf8" strokeWidth={2} dot={<CustomDot />} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {/* Tabs */}
+      <div className="mb-6 flex gap-0 border-b border-slate-200 dark:border-slate-700">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeTab === tab
+                ? "border-slate-900 text-slate-900 dark:border-slate-100 dark:text-slate-100"
+                : "border-transparent text-muted-foreground hover:text-slate-700 dark:hover:text-slate-300"
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* ── All Editions ──────────────────────────────────────────────────── */}
+      {activeTab === "All Editions" && (
+        <>
+          {chartData.length > 0 && (
+            <Card className="mb-6">
+              <CardContent className="pt-5 pb-4 px-4">
+                <div className="mb-1 flex items-start justify-between">
+                  <p className="text-sm font-medium">Winning Time Progression</p>
+                  <p className="text-xs text-muted-foreground">Lower = faster &nbsp;·&nbsp; <span className="text-amber-500">●</span> Record</p>
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={chartData} margin={{ top: 10, right: 16, left: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+                    <YAxis domain={[yMin, yMax]} tickFormatter={secsToLabel} tick={{ fontSize: 10 }} width={54} reversed />
+                    <Tooltip content={<CustomTooltip />} />
+                    {recordYears.map((yr) => (
+                      <ReferenceLine key={yr} x={yr} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.5} />
+                    ))}
+                    <Line type="monotone" dataKey="time" stroke="#38bdf8" strokeWidth={2} dot={<CustomDot />} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Add form */}
+          <Card className="mb-6">
+            <CardContent className="pt-5 pb-5">
+              <p className="mb-3 text-sm font-medium">Add New Edition</p>
+              <div className="flex flex-wrap gap-2">
+                <Input type="number" placeholder="Year" value={fYear} onChange={(e) => setFYear(e.target.value)} className="w-24" />
+                <Input placeholder="Horse" value={fHorse} onChange={(e) => setFHorse(e.target.value)} className="flex-1 min-w-[140px]" />
+                <Input placeholder="Driver" value={fDriver} onChange={(e) => setFDriver(e.target.value)} className="flex-1 min-w-[140px]" />
+                <Input placeholder={`Time (e.g. 1'14"5)`} value={fTime} onChange={(e) => setFTime(e.target.value)} className="w-36" />
+                <Input placeholder="Note (optional)" value={fNote} onChange={(e) => setFNote(e.target.value)} className="flex-1 min-w-[160px]" />
+                <Button onClick={addEntry} disabled={saving} className="shrink-0">{saving ? "Saving…" : "Add"}</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Table */}
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-16">Year</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Horse</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Driver</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Time</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Note</th>
+                      <th className="px-4 py-3 w-10" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {[...allWinners].reverse().map((w) => {
+                      const isSuspended = w.horse === "Race Suspended";
+                      const isRecord    = !!w.note;
+                      return (
+                        <tr
+                          key={`${w.year}-${w.fromDb ? "db" : "hc"}`}
+                          className={`transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40 ${isRecord ? "bg-amber-50/60 dark:bg-amber-950/20" : ""} ${isSuspended ? "opacity-40" : ""}`}
+                        >
+                          <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{w.year}</td>
+                          <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-slate-100">{w.horse ?? <span className="text-muted-foreground italic">Unknown</span>}</td>
+                          <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">{w.driver ?? <span className="text-muted-foreground">—</span>}</td>
+                          <td className="px-4 py-2.5">
+                            {w.time ? <span className="font-mono text-sky-700 dark:text-sky-400 font-semibold">{w.time}</span> : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5 hidden sm:table-cell">
+                            {isRecord && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                                ★ {w.note}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            {w.fromDb && w.dbId && (
+                              <button onClick={() => deleteEntry(w.dbId!, w.year)} className="rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
-      {/* Add entry form */}
-      <Card className="mb-6">
-        <CardContent className="pt-5 pb-5">
-          <p className="mb-3 text-sm font-medium">Add New Edition</p>
-          <div className="flex flex-wrap gap-2">
+      {/* ── Horses leaderboard ────────────────────────────────────────────── */}
+      {activeTab === "Horses" && (
+        <>
+          <div className="mb-4 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              type="number"
-              placeholder="Year"
-              value={fYear}
-              onChange={(e) => setFYear(e.target.value)}
-              className="w-24"
+              placeholder="Search horses…"
+              value={horseSearch}
+              onChange={(e) => setHorseSearch(e.target.value)}
+              className="pl-9"
             />
-            <Input
-              placeholder="Horse"
-              value={fHorse}
-              onChange={(e) => setFHorse(e.target.value)}
-              className="flex-1 min-w-[140px]"
-            />
-            <Input
-              placeholder="Driver"
-              value={fDriver}
-              onChange={(e) => setFDriver(e.target.value)}
-              className="flex-1 min-w-[140px]"
-            />
-            <Input
-              placeholder={`Time (e.g. 1'14"5)`}
-              value={fTime}
-              onChange={(e) => setFTime(e.target.value)}
-              className="w-36"
-            />
-            <Input
-              placeholder="Note (optional)"
-              value={fNote}
-              onChange={(e) => setFNote(e.target.value)}
-              className="flex-1 min-w-[160px]"
-            />
-            <Button onClick={addEntry} disabled={saving} className="shrink-0">
-              {saving ? "Saving…" : "Add"}
-            </Button>
           </div>
-        </CardContent>
-      </Card>
+          <div className="space-y-2">
+            {filteredHorses.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No horses found.</p>
+            ) : (
+              filteredHorses.map((h, i) => (
+                <LeaderboardRow key={h.name} rank={horseSearch ? i + 1 : horseLeaderboard.indexOf(h) + 1} name={h.name} wins={h.wins} years={h.years} />
+              ))
+            )}
+          </div>
+        </>
+      )}
 
-      {/* Winners table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-16">Year</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Horse</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Driver</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Note</th>
-                  <th className="px-4 py-3 w-10" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {[...allWinners].reverse().map((w) => {
-                  const isSuspended = w.horse === "Race Suspended";
-                  const isRecord    = !!w.note;
-                  return (
-                    <tr
-                      key={`${w.year}-${w.fromDb ? "db" : "hc"}`}
-                      className={`transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
-                        isRecord ? "bg-amber-50/60 dark:bg-amber-950/20" : ""
-                      } ${isSuspended ? "opacity-40" : ""}`}
-                    >
-                      <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{w.year}</td>
-                      <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-slate-100">
-                        {w.horse ?? <span className="text-muted-foreground italic">Unknown</span>}
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
-                        {w.driver ?? <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {w.time
-                          ? <span className="font-mono text-sky-700 dark:text-sky-400 font-semibold">{w.time}</span>
-                          : <span className="text-muted-foreground text-xs">—</span>
-                        }
-                      </td>
-                      <td className="px-4 py-2.5 hidden sm:table-cell">
-                        {isRecord && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-                            ★ {w.note}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        {w.fromDb && w.dbId && (
-                          <button
-                            onClick={() => deleteEntry(w.dbId!, w.year)}
-                            className="rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* ── Drivers leaderboard ───────────────────────────────────────────── */}
+      {activeTab === "Drivers" && (
+        <>
+          <div className="mb-4 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search drivers…"
+              value={driverSearch}
+              onChange={(e) => setDriverSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
-        </CardContent>
-      </Card>
+          <div className="space-y-2">
+            {filteredDrivers.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No drivers found.</p>
+            ) : (
+              filteredDrivers.map((d, i) => (
+                <LeaderboardRow key={d.name} rank={driverSearch ? i + 1 : driverLeaderboard.indexOf(d) + 1} name={d.name} wins={d.wins} years={d.years} />
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
