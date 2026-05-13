@@ -7,12 +7,16 @@ import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Dot,
 } from "recharts";
 
-// ── Data ──────────────────────────────────────────────────────────────────────
+// ── Static hardcoded data ─────────────────────────────────────────────────────
 
 type Winner = {
   year: number;
@@ -21,9 +25,11 @@ type Winner = {
   time: string | null;
   timeSecs: number | null;
   note: string | null;
+  fromDb?: boolean;
+  dbId?: string;
 };
 
-const WINNERS: Winner[] = [
+const HARDCODED: Winner[] = [
   { year: 1933, horse: null,                  driver: null,                  time: null,      timeSecs: null, note: null },
   { year: 1934, horse: "Frise Poulet",        driver: "G. Galea",            time: null,      timeSecs: null, note: null },
   { year: 1935, horse: "Edinburgh",           driver: "G. Zerafa",           time: null,      timeSecs: null, note: null },
@@ -92,7 +98,19 @@ const WINNERS: Winner[] = [
   { year: 2026, horse: "Hudo Du Ruel",        driver: "Rodney Gatt",         time: "1'11\"9", timeSecs: 71.9, note: "Record set in 2026" },
 ];
 
+const HARDCODED_YEARS = new Set(HARDCODED.map((w) => w.year));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function parseTimeStr(t: string): number | null {
+  if (!t.trim()) return null;
+  const m = t.match(/(\d+)[':'](\d{2})[."']?(\d)?/);
+  if (!m) return null;
+  const mins   = parseInt(m[1]);
+  const secs   = parseInt(m[2]);
+  const tenths = m[3] ? parseInt(m[3]) : 0;
+  return mins * 60 + secs + tenths / 10;
+}
 
 function secsToLabel(s: number) {
   const mins  = Math.floor(s / 60);
@@ -101,23 +119,17 @@ function secsToLabel(s: number) {
   return `${mins}'${String(whole).padStart(2, "0")}"${tenth}`;
 }
 
-const chartData = WINNERS
-  .filter((w) => w.timeSecs !== null)
-  .map((w) => ({ year: w.year, time: w.timeSecs, label: w.time, horse: w.horse, driver: w.driver, record: !!w.note }));
-
-const recordYears = chartData.filter((d) => d.record).map((d) => d.year);
-
-// Custom dot — highlights record years
 function CustomDot(props: { cx?: number; cy?: number; payload?: { record: boolean } }) {
   const { cx = 0, cy = 0, payload } = props;
-  if (payload?.record) {
-    return <Dot cx={cx} cy={cy} r={6} fill="#f59e0b" stroke="#fff" strokeWidth={2} />;
-  }
-  return <Dot cx={cx} cy={cy} r={4} fill="#38bdf8" stroke="#fff" strokeWidth={1.5} />;
+  return payload?.record
+    ? <Dot cx={cx} cy={cy} r={6} fill="#f59e0b" stroke="#fff" strokeWidth={2} />
+    : <Dot cx={cx} cy={cy} r={4} fill="#38bdf8" stroke="#fff" strokeWidth={1.5} />;
 }
 
-// Custom tooltip
-function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payload: typeof chartData[0] }[] }) {
+function CustomTooltip({ active, payload }: {
+  active?: boolean;
+  payload?: { payload: { year: number; label: string | null; horse: string | null; driver: string | null; record: boolean } }[];
+}) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (
@@ -135,8 +147,18 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payl
 
 export default function HistoryPage() {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const [checking, setChecking]   = useState(true);
+  const [dbEntries, setDbEntries] = useState<Winner[]>([]);
+  const [saving, setSaving]       = useState(false);
 
+  // Form state
+  const [fYear,   setFYear]   = useState("");
+  const [fHorse,  setFHorse]  = useState("");
+  const [fDriver, setFDriver] = useState("");
+  const [fTime,   setFTime]   = useState("");
+  const [fNote,   setFNote]   = useState("");
+
+  // Auth
   useEffect(() => {
     let mounted = true;
     async function init() {
@@ -147,21 +169,118 @@ export default function HistoryPage() {
       if (!mounted) return;
       if (!admin) { router.replace("/dashboard"); return; }
       setChecking(false);
+      loadDb();
     }
     init();
     return () => { mounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  const currentRecord = WINNERS.findLast((w) => w.timeSecs !== null);
-  const totalEditions = WINNERS.filter((w) => w.horse && w.horse !== "Race Suspended").length;
+  async function loadDb() {
+    const { data, error } = await supabase
+      .from("tazza_history")
+      .select("id,year,horse,driver,time_str,note")
+      .order("year", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setDbEntries(
+      (data ?? []).map((r) => ({
+        year:     r.year,
+        horse:    r.horse,
+        driver:   r.driver,
+        time:     r.time_str,
+        timeSecs: r.time_str ? parseTimeStr(r.time_str) : null,
+        note:     r.note,
+        fromDb:   true,
+        dbId:     r.id,
+      }))
+    );
+  }
+
+  async function addEntry() {
+    const year = parseInt(fYear);
+    if (!fYear || isNaN(year) || year < 1900 || year > 2100) {
+      toast.error("Enter a valid year.");
+      return;
+    }
+    if (!fHorse.trim()) {
+      toast.error("Horse name is required.");
+      return;
+    }
+    if (HARDCODED_YEARS.has(year)) {
+      toast.error(`${year} already exists in the historical records.`);
+      return;
+    }
+    if (dbEntries.some((e) => e.year === year)) {
+      toast.error(`${year} has already been added.`);
+      return;
+    }
+    if (fTime.trim() && parseTimeStr(fTime.trim()) === null) {
+      toast.error("Invalid time format. Use e.g. 1'14\"5");
+      return;
+    }
+
+    setSaving(true);
+    const { error } = await supabase.from("tazza_history").insert({
+      year,
+      horse:    fHorse.trim(),
+      driver:   fDriver.trim() || null,
+      time_str: fTime.trim() || null,
+      note:     fNote.trim() || null,
+    });
+    setSaving(false);
+
+    if (error) {
+      toast.error("Failed to save entry.");
+      console.error(error);
+      return;
+    }
+
+    toast.success(`${year} added.`);
+    setFYear(""); setFHorse(""); setFDriver(""); setFTime(""); setFNote("");
+    loadDb();
+  }
+
+  async function deleteEntry(id: string, year: number) {
+    const { error } = await supabase.from("tazza_history").delete().eq("id", id);
+    if (error) { toast.error("Failed to delete."); return; }
+    toast.success(`${year} removed.`);
+    setDbEntries((prev) => prev.filter((e) => e.dbId !== id));
+  }
+
+  // ── Merge hardcoded + DB (DB doesn't override hardcoded, only adds new years)
+  const allWinners: Winner[] = [...HARDCODED, ...dbEntries].sort((a, b) => a.year - b.year);
+
+  // Chart: only entries with a time
+  const chartData = allWinners
+    .filter((w) => w.timeSecs !== null)
+    .map((w) => ({
+      year:   w.year,
+      time:   w.timeSecs,
+      label:  w.time,
+      horse:  w.horse,
+      driver: w.driver,
+      record: !!w.note,
+    }));
+
+  const recordYears   = chartData.filter((d) => d.record).map((d) => d.year);
+  const currentRecord = [...allWinners].reverse().find((w) => w.timeSecs !== null);
+  const totalEditions = allWinners.filter((w) => w.horse && w.horse !== "Race Suspended").length;
   const mostWins = (() => {
     const counts = new Map<string, number>();
-    for (const w of WINNERS) {
+    for (const w of allWinners) {
       if (w.driver) counts.set(w.driver, (counts.get(w.driver) ?? 0) + 1);
     }
     const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
     return sorted[0] ? `${sorted[0][0]} (${sorted[0][1]})` : "—";
   })();
+
+  const yMin = Math.floor((Math.min(...chartData.map((d) => d.time ?? 999)) - 1));
+  const yMax = Math.ceil((Math.max(...chartData.map((d) => d.time ?? 0)) + 1));
 
   if (checking) {
     return (
@@ -180,17 +299,17 @@ export default function HistoryPage() {
       </div>
       <div className="mb-6 mt-4">
         <h1 className="text-xl font-semibold tracking-tight">Tazza l-Kbira</h1>
-        <p className="mt-1 text-sm text-muted-foreground">All-time winners of Malta's premier harness race, from 1933 to present.</p>
+        <p className="mt-1 text-sm text-muted-foreground">All-time winners of Malta's premier harness race.</p>
       </div>
 
       {/* Summary cards */}
       <div className="mb-6 flex flex-wrap gap-3">
         {[
-          { label: "Total Editions",   value: totalEditions.toString(),             color: "text-emerald-600 dark:text-emerald-400" },
-          { label: "First Edition",    value: "1933",                               color: "text-slate-700 dark:text-slate-200" },
-          { label: "Current Record",   value: currentRecord?.time ?? "—",           color: "text-sky-600 dark:text-sky-400" },
-          { label: "Record Holder",    value: currentRecord?.horse ?? "—",          color: "text-amber-600 dark:text-amber-400" },
-          { label: "Most Wins",        value: mostWins,                             color: "text-violet-600 dark:text-violet-400" },
+          { label: "Total Editions", value: totalEditions.toString(),       color: "text-emerald-600 dark:text-emerald-400" },
+          { label: "First Edition",  value: "1933",                         color: "text-slate-700 dark:text-slate-200" },
+          { label: "Current Record", value: currentRecord?.time ?? "—",     color: "text-sky-600 dark:text-sky-400" },
+          { label: "Record Horse",   value: currentRecord?.horse ?? "—",    color: "text-amber-600 dark:text-amber-400" },
+          { label: "Most Wins",      value: mostWins,                       color: "text-violet-600 dark:text-violet-400" },
         ].map(({ label, value, color }) => (
           <Card key={label} className="flex-1 min-w-[150px]">
             <CardContent className="py-4 px-4">
@@ -202,37 +321,69 @@ export default function HistoryPage() {
       </div>
 
       {/* Time progression chart */}
+      {chartData.length > 0 && (
+        <Card className="mb-6">
+          <CardContent className="pt-5 pb-4 px-4">
+            <div className="mb-1 flex items-start justify-between">
+              <p className="text-sm font-medium">Winning Time Progression</p>
+              <p className="text-xs text-muted-foreground">Lower = faster &nbsp;·&nbsp; <span className="text-amber-500">●</span> Record</p>
+            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={chartData} margin={{ top: 10, right: 16, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+                <YAxis domain={[yMin, yMax]} tickFormatter={secsToLabel} tick={{ fontSize: 10 }} width={54} reversed />
+                <Tooltip content={<CustomTooltip />} />
+                {recordYears.map((yr) => (
+                  <ReferenceLine key={yr} x={yr} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.5} />
+                ))}
+                <Line type="monotone" dataKey="time" stroke="#38bdf8" strokeWidth={2} dot={<CustomDot />} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Add entry form */}
       <Card className="mb-6">
-        <CardContent className="pt-5 pb-4 px-4">
-          <div className="mb-1 flex items-start justify-between">
-            <p className="text-sm font-medium">Winning Time Progression (2010 – 2026)</p>
-            <p className="text-xs text-muted-foreground">Lower = faster &nbsp;·&nbsp; <span className="text-amber-500">●</span> Record</p>
+        <CardContent className="pt-5 pb-5">
+          <p className="mb-3 text-sm font-medium">Add New Edition</p>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              type="number"
+              placeholder="Year"
+              value={fYear}
+              onChange={(e) => setFYear(e.target.value)}
+              className="w-24"
+            />
+            <Input
+              placeholder="Horse"
+              value={fHorse}
+              onChange={(e) => setFHorse(e.target.value)}
+              className="flex-1 min-w-[140px]"
+            />
+            <Input
+              placeholder="Driver"
+              value={fDriver}
+              onChange={(e) => setFDriver(e.target.value)}
+              className="flex-1 min-w-[140px]"
+            />
+            <Input
+              placeholder={`Time (e.g. 1'14"5)`}
+              value={fTime}
+              onChange={(e) => setFTime(e.target.value)}
+              className="w-36"
+            />
+            <Input
+              placeholder="Note (optional)"
+              value={fNote}
+              onChange={(e) => setFNote(e.target.value)}
+              className="flex-1 min-w-[160px]"
+            />
+            <Button onClick={addEntry} disabled={saving} className="shrink-0">
+              {saving ? "Saving…" : "Add"}
+            </Button>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData} margin={{ top: 10, right: 16, left: 8, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="year" tick={{ fontSize: 11 }} />
-              <YAxis
-                domain={[70, 79]}
-                tickFormatter={secsToLabel}
-                tick={{ fontSize: 10 }}
-                width={54}
-                reversed
-              />
-              <Tooltip content={<CustomTooltip />} />
-              {recordYears.map((yr) => (
-                <ReferenceLine key={yr} x={yr} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1.5} />
-              ))}
-              <Line
-                type="monotone"
-                dataKey="time"
-                stroke="#38bdf8"
-                strokeWidth={2}
-                dot={<CustomDot />}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
         </CardContent>
       </Card>
 
@@ -248,15 +399,16 @@ export default function HistoryPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Driver</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Time</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden sm:table-cell">Note</th>
+                  <th className="px-4 py-3 w-10" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {[...WINNERS].reverse().map((w) => {
+                {[...allWinners].reverse().map((w) => {
                   const isSuspended = w.horse === "Race Suspended";
-                  const isRecord = !!w.note;
+                  const isRecord    = !!w.note;
                   return (
                     <tr
-                      key={w.year}
+                      key={`${w.year}-${w.fromDb ? "db" : "hc"}`}
                       className={`transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
                         isRecord ? "bg-amber-50/60 dark:bg-amber-950/20" : ""
                       } ${isSuspended ? "opacity-40" : ""}`}
@@ -275,10 +427,21 @@ export default function HistoryPage() {
                         }
                       </td>
                       <td className="px-4 py-2.5 hidden sm:table-cell">
-                        {w.note && (
+                        {isRecord && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                             ★ {w.note}
                           </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {w.fromDb && w.dbId && (
+                          <button
+                            onClick={() => deleteEntry(w.dbId!, w.year)}
+                            className="rounded p-1 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         )}
                       </td>
                     </tr>

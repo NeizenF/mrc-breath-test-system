@@ -135,28 +135,43 @@ export default function SeasonDashboardPage() {
         .sort((a, b) => a[0] - b[0])
         .map(([rn, s]) => ({ race: `R${rn}`, Tested: s.tested, Positives: s.positives }));
 
-      // ── By driver ────────────────────────────────────────────────────────
-      const driverMap = new Map<string, { tests: number; positives: number }>();
+      // ── By driver (one test per meeting, deduplicated) ───────────────────
+      // Drivers are tested once per meeting regardless of how many races they drive.
+      // Count distinct meetings per driver, and distinct meetings where they tested positive.
+      const driverMeetings    = new Map<string, Set<string>>();
+      const driverPosMeetings = new Map<string, Set<string>>();
+
       for (const t of tests) {
         const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
         if (!entry) continue;
-        const e  = entry as { driver_name_raw?: string | null; drivers?: unknown };
-        const dr = pluck(e.drivers as Parameters<typeof pluck>[0]);
+        const e   = entry as { driver_name_raw?: string | null; drivers?: unknown };
+        const dr  = pluck(e.drivers as Parameters<typeof pluck>[0]);
         const name = (dr as { full_name?: string } | null)?.full_name?.trim()
           || e.driver_name_raw?.trim()
           || null;
         if (!name) continue;
-        const s = driverMap.get(name) ?? { tests: 0, positives: 0 };
-        s.tests += 1;
-        if ((t as { result?: string }).result === "positive") s.positives += 1;
-        driverMap.set(name, s);
-      }
-      const driverStats: DriverStat[] = Array.from(driverMap.entries())
-        .sort((a, b) => b[1].tests - a[1].tests)
-        .slice(0, 15)
-        .map(([driver, s]) => ({ driver, Tests: s.tests, Positives: s.positives }));
+        const mid = (t as { meeting_id?: string | null }).meeting_id;
+        if (!mid) continue;
 
-      const uniqueDrivers = driverMap.size;
+        if (!driverMeetings.has(name)) driverMeetings.set(name, new Set());
+        driverMeetings.get(name)!.add(mid);
+
+        if ((t as { result?: string }).result === "positive") {
+          if (!driverPosMeetings.has(name)) driverPosMeetings.set(name, new Set());
+          driverPosMeetings.get(name)!.add(mid);
+        }
+      }
+
+      const driverStats: DriverStat[] = Array.from(driverMeetings.entries())
+        .map(([driver, meetings]) => ({
+          driver,
+          Tests:     meetings.size,
+          Positives: driverPosMeetings.get(driver)?.size ?? 0,
+        }))
+        .sort((a, b) => b.Tests - a.Tests)
+        .slice(0, 15);
+
+      const uniqueDrivers = driverMeetings.size;
 
       // ── Monthly ──────────────────────────────────────────────────────────
       const monthMap = new Map<string, { tested: number; positives: number; ts: number }>();
