@@ -203,7 +203,7 @@ export default function RaceAnalyserPage() {
 
       window.addEventListener("mrc-import-progress", handler);
       (window as { chrome?: { runtime?: { sendMessage?: (...args: unknown[]) => void } } })
-        .chrome?.runtime?.sendMessage(extId, {
+        .chrome?.runtime?.sendMessage?.(extId, {
           type: "analyse-race",
           raceUrl: url.trim(),
           token,
