@@ -132,7 +132,7 @@ export default function DriverRiskPage() {
 
     const [{ data: allTests }, { data: allRaces }, { data: allMeetings }] = await Promise.all([
       supabase.from("tests")
-        .select("tested_at,entry_id,entries(driver_name_raw,drivers(full_name),race_id)")
+        .select("tested_at,meeting_id,entry_id,entries(driver_name_raw,drivers(full_name),race_id)")
         .eq("tested", true).not("tested_at", "is", null),
       supabase.from("races").select("id,race_time,meeting_id"),
       supabase.from("meetings").select("id,meeting_date"),
@@ -144,8 +144,10 @@ export default function DriverRiskPage() {
     const gapsPerDriver = new Map<string, number[]>();
 
     for (const t of allTests ?? []) {
-      if (!t.tested_at) continue;
-      const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
+      const row = t as { tested_at: string | null; meeting_id: string | null; entries: unknown };
+      if (!row.tested_at || !row.meeting_id) continue;
+
+      const entry = pluck(row.entries as Parameters<typeof pluck>[0]);
       if (!entry) continue;
       const e    = entry as { driver_name_raw?: string | null; drivers?: unknown; race_id?: string };
       const dr   = pluck(e.drivers as Parameters<typeof pluck>[0]);
@@ -153,14 +155,21 @@ export default function DriverRiskPage() {
       if (!name || !e.race_id) continue;
 
       const raceInfo = raceInfoMap.get(e.race_id);
-      if (!raceInfo?.race_time || !raceInfo?.meeting_id) continue;
-      const meetingDate = meetingDateMap.get(raceInfo.meeting_id);
+      if (!raceInfo?.race_time) continue;
+      // Guard: race must belong to this test's own meeting (mismatched FKs cause huge gaps)
+      if (raceInfo.meeting_id && raceInfo.meeting_id !== row.meeting_id) continue;
+
+      // Use test's meeting_id for the date — avoids stale race→meeting chain
+      const meetingDate = meetingDateMap.get(row.meeting_id);
       if (!meetingDate) continue;
 
       const raceDt = parseRaceDateTime(meetingDate, raceInfo.race_time);
       if (!raceDt) continue;
 
-      const gap = (new Date(t.tested_at).getTime() - raceDt.getTime()) / 60000;
+      const gap = (new Date(row.tested_at).getTime() - raceDt.getTime()) / 60000;
+      // Discard impossible values: testing window is realistically within 8h of race
+      if (gap < -8 * 60 || gap > 4 * 60) continue;
+
       if (!gapsPerDriver.has(name)) gapsPerDriver.set(name, []);
       gapsPerDriver.get(name)!.push(gap);
     }

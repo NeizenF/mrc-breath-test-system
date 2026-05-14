@@ -89,7 +89,7 @@ export default function AppHeader() {
         )}
 
         <div className="ml-auto flex items-center gap-3">
-          <span className="hidden text-[10px] font-mono text-slate-400 dark:text-slate-600 sm:block">v1.2.15</span>
+          <span className="hidden text-[10px] font-mono text-slate-400 dark:text-slate-600 sm:block">v1.2.16</span>
           <Button
             variant="ghost"
             size="icon"
