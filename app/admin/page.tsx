@@ -7,7 +7,7 @@ import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import {
   CalendarDays, ArchiveIcon, CalendarRange,
   ClipboardList, UserCog, Printer, Flag, Timer,
-  BarChart2, FlaskConical, ShieldAlert, Trophy, Telescope,
+  BarChart2, FlaskConical, ShieldAlert, Trophy,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -80,13 +80,6 @@ const GROUPS = [
         title: "Driver Risk",
         description: "Analyse testing compliance and flag late drivers per meeting.",
         color: "bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400",
-      },
-      {
-        href: "/admin/race-analyser",
-        icon: Telescope,
-        title: "Race Analyser",
-        description: "Paste any MRC race link for AI-powered predictions and insights.",
-        color: "bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400",
       },
     ],
   },
