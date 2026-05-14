@@ -193,7 +193,7 @@ function parseHorseProfile(html: string): HorseProfile {
   const root = parse(html);
 
   const detailsText = root.querySelector(".horsedetails")?.text ?? "";
-  const foreignMatch = detailsText.match(/Foreign Career:\s*(.+?)(?:Currently|$)/s);
+  const foreignMatch = detailsText.match(/Foreign Career:\s*([\s\S]+?)(?:Currently|$)/);
   const foreignCareer = foreignMatch?.[1]?.replace(/\s+/g, " ").trim() ?? "";
 
   const tables = root.querySelectorAll(".statisticstable");
