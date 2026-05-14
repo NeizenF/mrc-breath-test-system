@@ -359,48 +359,64 @@ Be concise, data-driven, and confident. Reference actual times and positions fro
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const url: string = body.url ?? "";
+    let race: ReturnType<typeof parseRacePage>;
 
-    if (!url.includes("maltaracingclub.com/race.php")) {
-      return NextResponse.json(
-        { error: "Please paste a valid MRC race URL (maltaracingclub.com/race.php?id=...)" },
-        { status: 400 }
-      );
+    if (body.raceHtml && Array.isArray(body.horseProfiles)) {
+      // Extension mode: HTML already fetched by real browser (bypasses Cloudflare)
+      race = parseRacePage(body.raceHtml);
+
+      if (race.horses.length === 0) {
+        return NextResponse.json(
+          { error: "No horses found in the race page HTML." },
+          { status: 422 }
+        );
+      }
+
+      for (const h of race.horses) {
+        const profileData = (body.horseProfiles as { horseId: string; html: string }[])
+          .find((p) => p.horseId === h.horseId);
+        if (profileData?.html) h.profile = parseHorseProfile(profileData.html);
+      }
+    } else {
+      // Direct URL mode (may be blocked by Cloudflare — use extension instead)
+      const url: string = body.url ?? "";
+
+      if (!url.includes("maltaracingclub.com/race.php")) {
+        return NextResponse.json(
+          { error: "Please paste a valid MRC race URL (maltaracingclub.com/race.php?id=...)" },
+          { status: 400 }
+        );
+      }
+
+      const raceHtml = await fetchMRC(url);
+      race = parseRacePage(raceHtml);
+
+      if (race.horses.length === 0) {
+        return NextResponse.json(
+          { error: "No horses found — the page may have changed or the URL is not a race page." },
+          { status: 422 }
+        );
+      }
+
+      const BATCH = 3;
+      for (let i = 0; i < race.horses.length; i += BATCH) {
+        const batch = race.horses.slice(i, i + BATCH);
+        const profiles = await Promise.all(
+          batch.map((h) =>
+            fetchMRC(`https://maltaracingclub.com/horse/${h.horseId}/${h.horseSlug}`)
+              .then(parseHorseProfile)
+              .catch(() => null)
+          )
+        );
+        batch.forEach((h, j) => { h.profile = profiles[j]; });
+      }
     }
 
-    // 1. Fetch and parse race page
-    const raceHtml = await fetchMRC(url);
-    const race = parseRacePage(raceHtml);
-
-    if (race.horses.length === 0) {
-      return NextResponse.json(
-        { error: "No horses found — the page may have changed or the URL is not a race page." },
-        { status: 422 }
-      );
-    }
-
-    // 2. Fetch horse profiles (3 at a time to avoid hammering the server)
-    const horses = race.horses;
-    const BATCH = 3;
-    for (let i = 0; i < horses.length; i += BATCH) {
-      const batch = horses.slice(i, i + BATCH);
-      const profiles = await Promise.all(
-        batch.map((h) =>
-          fetchMRC(`https://maltaracingclub.com/horse/${h.horseId}/${h.horseSlug}`)
-            .then(parseHorseProfile)
-            .catch(() => null)
-        )
-      );
-      batch.forEach((h, j) => {
-        h.profile = profiles[j];
-      });
-    }
-
-    // 3. Call Gemini
+    // Call Gemini
     let analysis = "";
     let analysisError = "";
     try {
-      analysis = await callGemini(buildPrompt(race, horses));
+      analysis = await callGemini(buildPrompt(race, race.horses));
     } catch (e: unknown) {
       analysisError = e instanceof Error ? e.message : String(e);
     }
@@ -414,7 +430,7 @@ export async function POST(req: NextRequest) {
         dateStr: race.dateStr,
         raceType: race.raceType,
       },
-      horses,
+      horses: race.horses,
       analysis,
       analysisError,
     });

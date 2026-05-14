@@ -145,6 +145,7 @@ function PosBadge({ pos }: { pos: string }) {
 export default function RaceAnalyserPage() {
   const router = useRouter();
   const [checkingAccess, setCheckingAccess] = useState(true);
+  const [extId, setExtId] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -160,6 +161,7 @@ export default function RaceAnalyserPage() {
       const admin = await isCurrentUserAdmin();
       if (!mounted) return;
       if (!admin) { router.replace("/dashboard"); return; }
+      setExtId(document.documentElement.getAttribute("data-mrc-extension-id"));
       setCheckingAccess(false);
     }
     init();
@@ -173,11 +175,44 @@ export default function RaceAnalyserPage() {
     setResult(null);
     setLoadingMsg("Fetching race card...");
 
-    const msgs = [
-      "Fetching race card...",
-      "Loading horse profiles...",
-      "Running AI analysis...",
-    ];
+    if (extId) {
+      // Extension mode: browser fetches MRC pages (bypasses Cloudflare)
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? "";
+
+      const handler = (e: Event) => {
+        const d = (e as CustomEvent<Record<string, unknown>>).detail;
+        if (d.event === "profiles-start") {
+          setLoadingMsg(`Loading horse profiles (0/${d.total})...`);
+        } else if (d.event === "profile-done") {
+          setLoadingMsg(`Loading horse profiles (${d.index}/${d.total})...`);
+        } else if (d.event === "analysing") {
+          setLoadingMsg("Running AI analysis...");
+        } else if (d.event === "analyse-done") {
+          window.removeEventListener("mrc-import-progress", handler);
+          setResult(d.result as RaceResult);
+          setLoading(false);
+          setLoadingMsg("");
+        } else if (d.event === "analyse-error") {
+          window.removeEventListener("mrc-import-progress", handler);
+          setError((d.message as string) ?? "Analysis failed.");
+          setLoading(false);
+          setLoadingMsg("");
+        }
+      };
+
+      window.addEventListener("mrc-import-progress", handler);
+      (window as { chrome?: { runtime?: { sendMessage?: (...args: unknown[]) => void } } })
+        .chrome?.runtime?.sendMessage(extId, {
+          type: "analyse-race",
+          raceUrl: url.trim(),
+          token,
+        });
+      return;
+    }
+
+    // Fallback: direct API call (may fail if Cloudflare blocks server-side fetch)
+    const msgs = ["Fetching race card...", "Loading horse profiles...", "Running AI analysis..."];
     let idx = 0;
     const interval = setInterval(() => {
       idx = (idx + 1) % msgs.length;
@@ -232,6 +267,11 @@ export default function RaceAnalyserPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Paste any MRC race link — we'll pull every horse's profile and generate AI predictions.
         </p>
+        {extId ? (
+          <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Extension detected — MRC pages will load via browser.</p>
+        ) : (
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Extension not detected — install the MRC extension for best results.</p>
+        )}
       </div>
 
       {/* Input */}
