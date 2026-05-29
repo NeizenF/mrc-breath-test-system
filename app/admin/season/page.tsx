@@ -12,6 +12,8 @@ import {
   LineChart, Line, CartesianGrid, Legend,
   AreaChart, Area,
 } from "recharts";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,6 +73,7 @@ export default function SeasonDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AllData | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -92,8 +95,9 @@ export default function SeasonDashboardPage() {
 
         supabase
           .from("tests")
-          .select("meeting_id,result,entries(driver_name_raw,drivers(full_name),races(race_number))")
-          .eq("tested", true),
+          .select("meeting_id,entry_id,result,entries(driver_name_raw,drivers(full_name),races(race_number))")
+          .eq("tested", true)
+          .limit(10000),
       ]);
 
       if (!mounted) return;
@@ -101,13 +105,25 @@ export default function SeasonDashboardPage() {
       const meetingList = meetings ?? [];
       const tests = rawTests ?? [];
 
-      // ── Per-meeting ──────────────────────────────────────────────────────
-      const statsMap = new Map<string, { totalTested: number; positives: number }>();
+      // ── Per-meeting — deduplicate by driver+meeting so one tested driver
+      //    with entries in 8 races counts as 1 test, not 8 ────────────────
+      const statsMap = new Map<string, { totalTested: number; positives: number; drivers: Set<string> }>();
       for (const t of tests) {
         if (!t.meeting_id) continue;
-        const s = statsMap.get(t.meeting_id) ?? { totalTested: 0, positives: 0 };
-        s.totalTested += 1;
-        if (t.result === "positive") s.positives += 1;
+        const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
+        const e = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
+        const dr = pluck(e?.drivers as Parameters<typeof pluck>[0]);
+        const driverKey = (dr as { full_name?: string } | null)?.full_name?.trim()
+          || e?.driver_name_raw?.trim()
+          || (t as { entry_id?: string }).entry_id
+          || "unknown";
+
+        const s = statsMap.get(t.meeting_id) ?? { totalTested: 0, positives: 0, drivers: new Set() };
+        if (!s.drivers.has(driverKey)) {
+          s.drivers.add(driverKey);
+          s.totalTested += 1;
+          if (t.result === "positive") s.positives += 1;
+        }
         statsMap.set(t.meeting_id, s);
       }
 
@@ -198,10 +214,13 @@ export default function SeasonDashboardPage() {
 
       const meetingsWithTests = meetingStats.filter((s) => s.totalTested > 0).length;
 
+      const totalTested = Array.from(statsMap.values()).reduce((sum, s) => sum + s.totalTested, 0);
+      const totalPositives = Array.from(statsMap.values()).reduce((sum, s) => sum + s.positives, 0);
+
       setData({
         totalMeetings: meetingsWithTests,
-        totalTested: tests.length,
-        totalPositives: tests.filter((t) => t.result === "positive").length,
+        totalTested,
+        totalPositives,
         uniqueDrivers,
         meetingStats,
         raceStats,
@@ -214,7 +233,7 @@ export default function SeasonDashboardPage() {
 
     load();
     return () => { mounted = false; };
-  }, [router]);
+  }, [router, refreshKey]);
 
   // ── Derived chart series ───────────────────────────────────────────────────
 
@@ -253,9 +272,15 @@ export default function SeasonDashboardPage() {
       <div className="mb-2">
         <Breadcrumbs items={[{ label: "Admin", href: "/admin" }, { label: "Season Dashboard" }]} />
       </div>
-      <div className="mb-5 mt-4">
-        <h1 className="text-xl font-semibold tracking-tight">Season Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Season-wide breath test analytics.</p>
+      <div className="mb-5 mt-4 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Season Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Season-wide breath test analytics.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => { setLoading(true); setRefreshKey(k => k + 1); }}>
+          <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+          Refresh
+        </Button>
       </div>
 
       {/* Summary cards */}
