@@ -117,7 +117,7 @@ export default function SeasonDashboardPage() {
           ? new Date(m.meeting_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
           : "—";
         return { id: m.id, label: m.title?.trim() || d, date: m.meeting_date ?? "", ...s };
-      }).filter((s) => s.totalTested > 0);
+      });
 
       // ── By race number ───────────────────────────────────────────────────
       const raceMap = new Map<number, { tested: number; positives: number }>();
@@ -196,8 +196,10 @@ export default function SeasonDashboardPage() {
         return { name: m.label, Total: cum };
       });
 
+      const meetingsWithTests = meetingStats.filter((s) => s.totalTested > 0).length;
+
       setData({
-        totalMeetings: meetingList.length,
+        totalMeetings: meetingsWithTests,
         totalTested: tests.length,
         totalPositives: tests.filter((t) => t.result === "positive").length,
         uniqueDrivers,
@@ -298,7 +300,7 @@ export default function SeasonDashboardPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-72 w-full rounded-xl" />)}
         </div>
-      ) : !data || data.meetingStats.length === 0 ? (
+      ) : !data || data.totalTested === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             No test data found across any meetings.
