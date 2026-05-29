@@ -93,13 +93,13 @@ export default function SeasonDashboardPage() {
         .order("meeting_date", { ascending: true });
 
       // Paginate tests — Supabase server cap is 1000 rows per request
-      const rawTests: { meeting_id: string | null; entry_id: string | null; result: string | null; entries: unknown }[] = [];
+      const rawTests: { meeting_id: string | null; entry_id: string | null; tested_at: string | null; result: string | null; entries: unknown }[] = [];
       const PAGE = 1000;
       let from = 0;
       while (true) {
         const { data: page } = await supabase
           .from("tests")
-          .select("meeting_id,entry_id,result,entries(driver_name_raw,drivers(id,full_name),races(race_number,meeting_id))")
+          .select("meeting_id,entry_id,tested_at,result,entries(driver_name_raw,drivers(id,full_name),races(race_number,meeting_id))")
           .eq("tested", true)
           .range(from, from + PAGE - 1);
         if (!page || page.length === 0) break;
@@ -147,10 +147,12 @@ export default function SeasonDashboardPage() {
         const race   = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
         const mid    = t.meeting_id ?? (race as { meeting_id?: string } | null)?.meeting_id ?? null;
         if (!mid) continue;
-        const driverKey = resolveKey(entry, t.entry_id);
+        // Use tested_at as dedup key — the raceday page stamps all entries for a
+        // driver with the same timestamp in one batch, so same tested_at = same driver event
+        const dedupKey = t.tested_at ?? resolveKey(entry, t.entry_id);
         const s = statsMap.get(mid) ?? { totalTested: 0, positives: 0, seen: new Set() };
-        if (driverKey && s.seen.has(driverKey)) { statsMap.set(mid, s); continue; }
-        if (driverKey) s.seen.add(driverKey);
+        if (dedupKey && s.seen.has(dedupKey)) { statsMap.set(mid, s); continue; }
+        if (dedupKey) s.seen.add(dedupKey);
         s.totalTested += 1;
         if (t.result === "positive") s.positives += 1;
         statsMap.set(mid, s);
