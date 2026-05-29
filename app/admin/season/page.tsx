@@ -113,30 +113,43 @@ export default function SeasonDashboardPage() {
       const meetingList = meetings ?? [];
       const tests = rawTests ?? [];
 
-      // ── Per-meeting — deduplicate by driver within meeting
-      //    (a driver tested once should count as 1 even if they have entries in multiple races)
+      // ── Build name → UUID map so drivers with inconsistent linkage
+      //    (some entries have drivers FK, others only have driver_name_raw) resolve to the same key
+      const nameToUuid = new Map<string, string>();
+      for (const t of tests) {
+        const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
+        const e     = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
+        const dr    = pluck(e?.drivers as Parameters<typeof pluck>[0]);
+        const uuid  = (dr as { id?: string } | null)?.id;
+        if (!uuid) continue;
+        const fullName = (dr as { full_name?: string } | null)?.full_name?.trim();
+        const rawName  = e?.driver_name_raw?.trim();
+        if (fullName) nameToUuid.set(fullName, uuid);
+        if (rawName)  nameToUuid.set(rawName, uuid);
+      }
+
+      function resolveKey(entry: unknown, fallbackEntryId: string | null | undefined): string | null {
+        const e    = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
+        const dr   = pluck(e?.drivers as Parameters<typeof pluck>[0]);
+        const uuid = (dr as { id?: string } | null)?.id;
+        if (uuid) return uuid;
+        const full = (dr as { full_name?: string } | null)?.full_name?.trim();
+        if (full)  return nameToUuid.get(full) ?? full;
+        const raw  = e?.driver_name_raw?.trim();
+        if (raw)   return nameToUuid.get(raw) ?? raw;
+        return fallbackEntryId ?? null;
+      }
+
+      // ── Per-meeting — deduplicate by driver within meeting ────────────────
       const statsMap = new Map<string, { totalTested: number; positives: number; seen: Set<string> }>();
       for (const t of tests) {
         const entry  = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
         const race   = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
         const mid    = t.meeting_id ?? (race as { meeting_id?: string } | null)?.meeting_id ?? null;
         if (!mid) continue;
-
-        const e      = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
-        const dr     = pluck(e?.drivers as Parameters<typeof pluck>[0]);
-        // Prefer driver UUID (stable unique ID), then name, then entry_id as last resort
-        const driverKey =
-          (dr as { id?: string } | null)?.id ||
-          (dr as { full_name?: string } | null)?.full_name?.trim() ||
-          e?.driver_name_raw?.trim() ||
-          (t as { entry_id?: string }).entry_id ||
-          null;
-
+        const driverKey = resolveKey(entry, t.entry_id);
         const s = statsMap.get(mid) ?? { totalTested: 0, positives: 0, seen: new Set() };
-        if (driverKey && s.seen.has(driverKey)) {
-          statsMap.set(mid, s);
-          continue; // already counted this driver for this meeting
-        }
+        if (driverKey && s.seen.has(driverKey)) { statsMap.set(mid, s); continue; }
         if (driverKey) s.seen.add(driverKey);
         s.totalTested += 1;
         if (t.result === "positive") s.positives += 1;
@@ -158,9 +171,7 @@ export default function SeasonDashboardPage() {
         const race   = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
         const rn: number | null = (race as { race_number?: number } | null)?.race_number ?? null;
         if (!rn) continue;
-        const e      = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
-        const dr     = pluck(e?.drivers as Parameters<typeof pluck>[0]);
-        const dKey   = (dr as { id?: string } | null)?.id || (dr as { full_name?: string } | null)?.full_name?.trim() || e?.driver_name_raw?.trim() || (t as { entry_id?: string }).entry_id || null;
+        const dKey = resolveKey(entry, (t as { entry_id?: string }).entry_id);
         if (!dKey) continue;
         const s = raceMap.get(rn) ?? { tested: new Set(), positives: new Set() };
         s.tested.add(dKey);
@@ -178,9 +189,7 @@ export default function SeasonDashboardPage() {
       for (const t of tests) {
         const entry  = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
         if (!entry) continue;
-        const e      = entry as { driver_name_raw?: string | null; drivers?: unknown };
-        const dr     = pluck(e.drivers as Parameters<typeof pluck>[0]);
-        const name   = (dr as { full_name?: string } | null)?.full_name?.trim() || e.driver_name_raw?.trim() || null;
+        const name = resolveKey(entry, null);
         if (!name) continue;
         const race   = pluck((entry as { races?: unknown }).races as Parameters<typeof pluck>[0]);
         const mid    = t.meeting_id ?? (race as { meeting_id?: string } | null)?.meeting_id ?? null;
