@@ -93,13 +93,13 @@ export default function SeasonDashboardPage() {
         .order("meeting_date", { ascending: true });
 
       // Paginate tests — Supabase server cap is 1000 rows per request
-      const rawTests: { meeting_id: string | null; result: string | null; entries: unknown }[] = [];
+      const rawTests: { meeting_id: string | null; entry_id: string | null; result: string | null; entries: unknown }[] = [];
       const PAGE = 1000;
       let from = 0;
       while (true) {
         const { data: page } = await supabase
           .from("tests")
-          .select("meeting_id,result,entries(driver_name_raw,drivers(full_name),races(race_number,meeting_id))")
+          .select("meeting_id,entry_id,result,entries(driver_name_raw,drivers(full_name),races(race_number,meeting_id))")
           .eq("tested", true)
           .range(from, from + PAGE - 1);
         if (!page || page.length === 0) break;
@@ -113,16 +113,30 @@ export default function SeasonDashboardPage() {
       const meetingList = meetings ?? [];
       const tests = rawTests ?? [];
 
-      // ── Per-meeting — use races.meeting_id as fallback if tests.meeting_id is null
-      const statsMap = new Map<string, { totalTested: number; positives: number }>();
+      // ── Per-meeting — deduplicate by driver within meeting
+      //    (a driver tested once should count as 1 even if they have entries in multiple races)
+      const statsMap = new Map<string, { totalTested: number; positives: number; seen: Set<string> }>();
       for (const t of tests) {
-        const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
-        const race  = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
-        const mid   = t.meeting_id
-          ?? (race as { meeting_id?: string } | null)?.meeting_id
-          ?? null;
+        const entry  = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
+        const race   = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
+        const mid    = t.meeting_id ?? (race as { meeting_id?: string } | null)?.meeting_id ?? null;
         if (!mid) continue;
-        const s = statsMap.get(mid) ?? { totalTested: 0, positives: 0 };
+
+        const e      = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
+        const dr     = pluck(e?.drivers as Parameters<typeof pluck>[0]);
+        // Use driver name if available, otherwise fall back to entry_id (unique per entry)
+        const driverKey =
+          (dr as { full_name?: string } | null)?.full_name?.trim() ||
+          e?.driver_name_raw?.trim() ||
+          (t as { entry_id?: string }).entry_id ||
+          null;
+
+        const s = statsMap.get(mid) ?? { totalTested: 0, positives: 0, seen: new Set() };
+        if (driverKey && s.seen.has(driverKey)) {
+          statsMap.set(mid, s);
+          continue; // already counted this driver for this meeting
+        }
+        if (driverKey) s.seen.add(driverKey);
         s.totalTested += 1;
         if (t.result === "positive") s.positives += 1;
         statsMap.set(mid, s);
@@ -215,10 +229,13 @@ export default function SeasonDashboardPage() {
 
       const meetingsWithTests = meetingStats.filter((s) => s.totalTested > 0).length;
 
+      const totalTested   = Array.from(statsMap.values()).reduce((n, s) => n + s.totalTested, 0);
+      const totalPositives = Array.from(statsMap.values()).reduce((n, s) => n + s.positives, 0);
+
       setData({
         totalMeetings: meetingsWithTests,
-        totalTested: tests.length,
-        totalPositives: tests.filter((t) => t.result === "positive").length,
+        totalTested,
+        totalPositives,
         uniqueDrivers,
         meetingStats,
         raceStats,
