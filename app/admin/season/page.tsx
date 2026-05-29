@@ -133,7 +133,7 @@ export default function SeasonDashboardPage() {
           ? new Date(m.meeting_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
           : "—";
         return { id: m.id, label: m.title?.trim() || d, date: m.meeting_date ?? "", ...s };
-      });
+      }).filter((s) => s.totalTested > 0);
 
       // ── By race number ───────────────────────────────────────────────────
       const raceMap = new Map<number, { tested: number; positives: number }>();
