@@ -151,44 +151,45 @@ export default function SeasonDashboardPage() {
         return { id: m.id, label: m.title?.trim() || d, date: m.meeting_date ?? "", ...s };
       }).filter((s) => s.totalTested > 0);
 
-      // ── By race number ───────────────────────────────────────────────────
-      const raceMap = new Map<number, { tested: number; positives: number }>();
+      // ── By race number — deduplicate by driver within each race ─────────
+      const raceMap = new Map<number, { tested: Set<string>; positives: Set<string> }>();
       for (const t of tests) {
-        const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
-        const race  = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
+        const entry  = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
+        const race   = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
         const rn: number | null = (race as { race_number?: number } | null)?.race_number ?? null;
         if (!rn) continue;
-        const s = raceMap.get(rn) ?? { tested: 0, positives: 0 };
-        s.tested += 1;
-        if ((t as { result?: string }).result === "positive") s.positives += 1;
+        const e      = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
+        const dr     = pluck(e?.drivers as Parameters<typeof pluck>[0]);
+        const dKey   = (dr as { id?: string } | null)?.id || (dr as { full_name?: string } | null)?.full_name?.trim() || e?.driver_name_raw?.trim() || (t as { entry_id?: string }).entry_id || null;
+        if (!dKey) continue;
+        const s = raceMap.get(rn) ?? { tested: new Set(), positives: new Set() };
+        s.tested.add(dKey);
+        if (t.result === "positive") s.positives.add(dKey);
         raceMap.set(rn, s);
       }
       const raceStats: RaceStat[] = Array.from(raceMap.entries())
         .sort((a, b) => a[0] - b[0])
-        .map(([rn, s]) => ({ race: `R${rn}`, Tested: s.tested, Positives: s.positives }));
+        .map(([rn, s]) => ({ race: `R${rn}`, Tested: s.tested.size, Positives: s.positives.size }));
 
-      // ── By driver (one test per meeting, deduplicated) ───────────────────
-      // Drivers are tested once per meeting regardless of how many races they drive.
-      // Count distinct meetings per driver, and distinct meetings where they tested positive.
+      // ── By driver — count distinct meetings per driver ───────────────────
       const driverMeetings    = new Map<string, Set<string>>();
       const driverPosMeetings = new Map<string, Set<string>>();
 
       for (const t of tests) {
-        const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
+        const entry  = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
         if (!entry) continue;
-        const e   = entry as { driver_name_raw?: string | null; drivers?: unknown };
-        const dr  = pluck(e.drivers as Parameters<typeof pluck>[0]);
-        const name = (dr as { full_name?: string } | null)?.full_name?.trim()
-          || e.driver_name_raw?.trim()
-          || null;
+        const e      = entry as { driver_name_raw?: string | null; drivers?: unknown };
+        const dr     = pluck(e.drivers as Parameters<typeof pluck>[0]);
+        const name   = (dr as { full_name?: string } | null)?.full_name?.trim() || e.driver_name_raw?.trim() || null;
         if (!name) continue;
-        const mid = (t as { meeting_id?: string | null }).meeting_id;
+        const race   = pluck((entry as { races?: unknown }).races as Parameters<typeof pluck>[0]);
+        const mid    = t.meeting_id ?? (race as { meeting_id?: string } | null)?.meeting_id ?? null;
         if (!mid) continue;
 
         if (!driverMeetings.has(name)) driverMeetings.set(name, new Set());
         driverMeetings.get(name)!.add(mid);
 
-        if ((t as { result?: string }).result === "positive") {
+        if (t.result === "positive") {
           if (!driverPosMeetings.has(name)) driverPosMeetings.set(name, new Set());
           driverPosMeetings.get(name)!.add(mid);
         }
@@ -427,7 +428,7 @@ export default function SeasonDashboardPage() {
                       margin={{ top: 0, right: 24, left: 8, bottom: 0 }}
                     >
                       <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <YAxis type="category" dataKey="driver" tick={{ fontSize: 10 }} width={110} />
+                      <YAxis type="category" dataKey="driver" tick={{ fontSize: 10 }} width={130} interval={0} />
                       <Tooltip />
                       <Legend verticalAlign="top" height={26} wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="Tests" fill="#34d399" radius={[0, 3, 3, 0]} />
