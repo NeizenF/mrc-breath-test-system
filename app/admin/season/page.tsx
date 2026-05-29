@@ -87,32 +87,45 @@ export default function SeasonDashboardPage() {
       if (!mounted) return;
       if (!admin) { router.replace("/dashboard"); return; }
 
-      const [{ data: meetings }, { data: rawTests }] = await Promise.all([
-        supabase
-          .from("meetings")
-          .select("id,title,meeting_date")
-          .order("meeting_date", { ascending: true }),
+      const { data: meetings } = await supabase
+        .from("meetings")
+        .select("id,title,meeting_date")
+        .order("meeting_date", { ascending: true });
 
-        supabase
+      // Paginate tests — Supabase server cap is 1000 rows per request
+      const rawTests: { meeting_id: string | null; result: string | null; entries: unknown }[] = [];
+      const PAGE = 1000;
+      let from = 0;
+      while (true) {
+        const { data: page } = await supabase
           .from("tests")
-          .select("meeting_id,result,entries(driver_name_raw,drivers(full_name),races(race_number))")
+          .select("meeting_id,result,entries(driver_name_raw,drivers(full_name),races(race_number,meeting_id))")
           .eq("tested", true)
-          .limit(10000),
-      ]);
+          .range(from, from + PAGE - 1);
+        if (!page || page.length === 0) break;
+        rawTests.push(...(page as typeof rawTests));
+        if (page.length < PAGE) break;
+        from += PAGE;
+      }
 
       if (!mounted) return;
 
       const meetingList = meetings ?? [];
       const tests = rawTests ?? [];
 
-      // ── Per-meeting ──────────────────────────────────────────────────────
+      // ── Per-meeting — use races.meeting_id as fallback if tests.meeting_id is null
       const statsMap = new Map<string, { totalTested: number; positives: number }>();
       for (const t of tests) {
-        if (!t.meeting_id) continue;
-        const s = statsMap.get(t.meeting_id) ?? { totalTested: 0, positives: 0 };
+        const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
+        const race  = pluck((entry as { races?: unknown } | null)?.races as Parameters<typeof pluck>[0]);
+        const mid   = t.meeting_id
+          ?? (race as { meeting_id?: string } | null)?.meeting_id
+          ?? null;
+        if (!mid) continue;
+        const s = statsMap.get(mid) ?? { totalTested: 0, positives: 0 };
         s.totalTested += 1;
         if (t.result === "positive") s.positives += 1;
-        statsMap.set(t.meeting_id, s);
+        statsMap.set(mid, s);
       }
 
       const meetingStats: MeetingStat[] = meetingList.map((m) => {
