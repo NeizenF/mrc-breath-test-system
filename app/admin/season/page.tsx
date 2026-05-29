@@ -99,7 +99,7 @@ export default function SeasonDashboardPage() {
       while (true) {
         const { data: page } = await supabase
           .from("tests")
-          .select("meeting_id,entry_id,result,entries(driver_name_raw,drivers(full_name),races(race_number,meeting_id))")
+          .select("meeting_id,entry_id,result,entries(driver_name_raw,drivers(id,full_name),races(race_number,meeting_id))")
           .eq("tested", true)
           .range(from, from + PAGE - 1);
         if (!page || page.length === 0) break;
@@ -124,8 +124,9 @@ export default function SeasonDashboardPage() {
 
         const e      = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
         const dr     = pluck(e?.drivers as Parameters<typeof pluck>[0]);
-        // Use driver name if available, otherwise fall back to entry_id (unique per entry)
+        // Prefer driver UUID (stable unique ID), then name, then entry_id as last resort
         const driverKey =
+          (dr as { id?: string } | null)?.id ||
           (dr as { full_name?: string } | null)?.full_name?.trim() ||
           e?.driver_name_raw?.trim() ||
           (t as { entry_id?: string }).entry_id ||
