@@ -95,7 +95,7 @@ export default function SeasonDashboardPage() {
 
         supabase
           .from("tests")
-          .select("meeting_id,entry_id,result,entries(driver_name_raw,drivers(full_name),races(race_number))")
+          .select("meeting_id,result,entries(driver_name_raw,drivers(full_name),races(race_number))")
           .eq("tested", true)
           .limit(10000),
       ]);
@@ -105,25 +105,13 @@ export default function SeasonDashboardPage() {
       const meetingList = meetings ?? [];
       const tests = rawTests ?? [];
 
-      // ── Per-meeting — deduplicate by driver+meeting so one tested driver
-      //    with entries in 8 races counts as 1 test, not 8 ────────────────
-      const statsMap = new Map<string, { totalTested: number; positives: number; drivers: Set<string> }>();
+      // ── Per-meeting ──────────────────────────────────────────────────────
+      const statsMap = new Map<string, { totalTested: number; positives: number }>();
       for (const t of tests) {
         if (!t.meeting_id) continue;
-        const entry = pluck((t as { entries: unknown }).entries as Parameters<typeof pluck>[0]);
-        const e = entry as { driver_name_raw?: string | null; drivers?: unknown } | null;
-        const dr = pluck(e?.drivers as Parameters<typeof pluck>[0]);
-        const driverKey = (dr as { full_name?: string } | null)?.full_name?.trim()
-          || e?.driver_name_raw?.trim()
-          || (t as { entry_id?: string }).entry_id
-          || "unknown";
-
-        const s = statsMap.get(t.meeting_id) ?? { totalTested: 0, positives: 0, drivers: new Set() };
-        if (!s.drivers.has(driverKey)) {
-          s.drivers.add(driverKey);
-          s.totalTested += 1;
-          if (t.result === "positive") s.positives += 1;
-        }
+        const s = statsMap.get(t.meeting_id) ?? { totalTested: 0, positives: 0 };
+        s.totalTested += 1;
+        if (t.result === "positive") s.positives += 1;
         statsMap.set(t.meeting_id, s);
       }
 
@@ -214,13 +202,10 @@ export default function SeasonDashboardPage() {
 
       const meetingsWithTests = meetingStats.filter((s) => s.totalTested > 0).length;
 
-      const totalTested = Array.from(statsMap.values()).reduce((sum, s) => sum + s.totalTested, 0);
-      const totalPositives = Array.from(statsMap.values()).reduce((sum, s) => sum + s.positives, 0);
-
       setData({
         totalMeetings: meetingsWithTests,
-        totalTested,
-        totalPositives,
+        totalTested: tests.length,
+        totalPositives: tests.filter((t) => t.result === "positive").length,
         uniqueDrivers,
         meetingStats,
         raceStats,
