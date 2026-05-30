@@ -7,7 +7,7 @@ import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import {
   CalendarDays, ArchiveIcon, CalendarRange,
   ClipboardList, UserCog, Printer, Flag, Timer,
-  BarChart2, FlaskConical, ShieldAlert, Trophy,
+  BarChart2, FlaskConical, ShieldAlert, Trophy, Globe,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -80,6 +80,18 @@ const GROUPS = [
         title: "Driver Risk",
         description: "Analyse testing compliance and flag late drivers per meeting.",
         color: "bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400",
+      },
+    ],
+  },
+  {
+    label: "International",
+    items: [
+      {
+        href: "/admin/sweden",
+        icon: Globe,
+        title: "Sweden",
+        description: "Browse Swedish trotting photo finishes from Travsport.",
+        color: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",
       },
     ],
   },
