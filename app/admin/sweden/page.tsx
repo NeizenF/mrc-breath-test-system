@@ -1,13 +1,75 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { isCurrentUserAdmin } from "@/lib/isCurrentUserAdmin";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Loader2, ImageOff, Video } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, ImageOff, Video, Tv } from "lucide-react";
+
+// ── Live streams ──────────────────────────────────────────────────────────────
+
+const BASE_STREAM = "https://kanal75xto-llhls.akamaized.net/live/Data";
+function streamUrl(n: number, suffix: string) {
+  return `${BASE_STREAM}/atg-kanal-${n}-${suffix}-rr/HLS-Legacy-HL/atg-kanal-${n}-${suffix}-rr.m3u8`;
+}
+
+const STREAMS = [
+  { label: "Ch 1",  url: streamUrl(1,  "01a") },
+  { label: "Ch 2",  url: streamUrl(2,  "01a") },
+  { label: "Ch 3",  url: streamUrl(3,  "01a") },
+  { label: "Ch 4",  url: streamUrl(4,  "01a") },
+  { label: "Ch 5",  url: streamUrl(5,  "01a") },
+  { label: "Ch 6",  url: streamUrl(6,  "01a") },
+  { label: "Ch 7",  url: streamUrl(7,  "01a") },
+  { label: "Ch 8",  url: streamUrl(8,  "01a") },
+  { label: "Ch 11", url: streamUrl(11, "02a") },
+  { label: "Ch 12", url: streamUrl(12, "02a") },
+  { label: "Ch 13", url: streamUrl(13, "02a") },
+  { label: "Ch 14", url: streamUrl(14, "02a") },
+  { label: "Ch 15", url: streamUrl(15, "02a") },
+  { label: "Ch 17", url: streamUrl(17, "02a") },
+  { label: "Ch 19", url: streamUrl(19, "02a") },
+];
+
+function HlsPlayer({ src }: { src: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Safari — native HLS
+      video.src = src;
+      return;
+    }
+
+    let hls: import("hls.js").default | null = null;
+    import("hls.js").then(({ default: Hls }) => {
+      if (!Hls.isSupported()) return;
+      hls = new Hls({ lowLatencyMode: true });
+      hls.loadSource(src);
+      hls.attachMedia(video);
+    });
+
+    return () => { hls?.destroy(); };
+  }, [src]);
+
+  return (
+    <video
+      ref={videoRef}
+      controls
+      autoPlay
+      muted
+      playsInline
+      className="w-full rounded-lg bg-black"
+      style={{ maxHeight: "480px" }}
+    />
+  );
+}
 
 // ── ATG API types ──────────────────────────────────────────────────────────────
 
@@ -83,6 +145,10 @@ export default function SwedenPage() {
 
   const [loadingCal, setLoadingCal] = useState(false);
   const [loadingRace, setLoadingRace] = useState(false);
+
+  // Live stream state
+  const [showLive, setShowLive]     = useState(false);
+  const [streamIdx, setStreamIdx]   = useState(0);
 
   // Photo finish state
   const [showPhoto, setShowPhoto]   = useState(false);
@@ -167,6 +233,38 @@ export default function SwedenPage() {
         <h1 className="text-xl font-semibold tracking-tight">Sweden — ATG Racing</h1>
         <p className="mt-1 text-sm text-muted-foreground">Swedish trotting race cards and results via ATG.</p>
       </div>
+
+      {/* Live TV */}
+      <Card className="mb-5">
+        <CardContent className="pt-4 pb-4 px-4">
+          <button
+            className="flex w-full items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100"
+            onClick={() => setShowLive(!showLive)}
+          >
+            <Tv className="h-4 w-4 text-red-500" />
+            ATG Live TV
+            <span className="ml-auto text-xs text-muted-foreground">{showLive ? "▲ Hide" : "▼ Show"}</span>
+          </button>
+
+          {showLive && (
+            <div className="mt-4">
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {STREAMS.map((s, i) => (
+                  <Button
+                    key={i}
+                    variant={streamIdx === i ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setStreamIdx(i)}
+                  >
+                    {s.label}
+                  </Button>
+                ))}
+              </div>
+              <HlsPlayer src={STREAMS[streamIdx].url} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Date navigator */}
       <div className="mb-5 flex items-center gap-2">
